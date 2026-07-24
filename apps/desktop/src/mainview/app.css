@@ -1,0 +1,177 @@
+:root {
+  color: #18201e;
+  background: #f4f6f5;
+  font-family:
+    Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  min-width: 320px;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  min-height: 100vh;
+}
+
+.shell {
+  position: relative;
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  overflow: hidden;
+  padding: 48px;
+  background:
+    linear-gradient(90deg, #176b57 0 10px, transparent 10px),
+    #f4f6f5;
+}
+
+.brand-mark {
+  position: absolute;
+  top: 32px;
+  left: 42px;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid #bed0ca;
+  border-radius: 6px;
+  color: #176b57;
+  background: #ffffff;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.welcome {
+  width: min(100%, 620px);
+  text-align: center;
+}
+
+.product-name {
+  margin: 0 0 18px;
+  color: #52625e;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+h1 {
+  margin: 0;
+  color: #18201e;
+  font-size: clamp(42px, 8vh, 68px);
+  font-weight: 680;
+  letter-spacing: 0;
+  line-height: 1.08;
+}
+
+.summary {
+  margin: 20px 0 0;
+  color: #52625e;
+  font-size: 18px;
+  line-height: 1.6;
+}
+
+.runtime-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 38px;
+  padding: 9px 12px;
+  border: 1px solid #ccd8d4;
+  border-radius: 6px;
+  color: #33443f;
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #1e8c70;
+  box-shadow: 0 0 0 3px #dcece7;
+}
+
+footer {
+  position: absolute;
+  right: 32px;
+  bottom: 26px;
+  color: #74827e;
+  font-size: 12px;
+}
+
+@media (max-width: 560px) {
+  .shell {
+    padding: 40px 24px;
+  }
+
+  .brand-mark {
+    top: 24px;
+    left: 32px;
+  }
+
+  h1 {
+    font-size: 44px;
+  }
+
+  .summary {
+    font-size: 16px;
+  }
+
+  footer {
+    right: 20px;
+    bottom: 18px;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color: #edf3f1;
+    background: #171c1b;
+  }
+
+  .shell {
+    background:
+      linear-gradient(90deg, #42a98f 0 10px, transparent 10px),
+      #171c1b;
+  }
+
+  .brand-mark,
+  .runtime-status {
+    border-color: #3a4844;
+    background: #212826;
+  }
+
+  .brand-mark {
+    color: #66c3ab;
+  }
+
+  h1 {
+    color: #edf3f1;
+  }
+
+  .product-name,
+  .summary {
+    color: #a8b5b1;
+  }
+
+  .runtime-status {
+    color: #d5dedb;
+  }
+
+  footer {
+    color: #84918d;
+  }
+}

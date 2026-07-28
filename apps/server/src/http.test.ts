@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
-import { CollectorUnavailableError } from "@nexume/collector-core";
-import type { ServerCore } from "@nexume/server-core";
+import {
+  CollectorQueryFailedError,
+  type ServerCore,
+} from "@nexume/server-core";
 
 import { createRequestHandler } from "./http";
 
@@ -9,13 +11,17 @@ const token = "test-token";
 const authorization = { Authorization: `Bearer ${token}` };
 
 function createCore(
-  listSessions: ServerCore["listSessions"] = async (params) => ({
+  listSessions: ServerCore["listSessions"] = async () => ({
     items: [],
-    total: 0,
-    ...params,
+    hasMore: false,
+    warnings: [],
   }),
 ): ServerCore {
-  return { listSessions };
+  return {
+    listSessions,
+    listCollectors: () => [],
+    registerCollector: () => ({ touch() {}, unregister() {} }),
+  };
 }
 
 describe("Server HTTP API", () => {
@@ -38,29 +44,29 @@ describe("Server HTTP API", () => {
     expect(response.status).toBe(401);
   });
 
-  test("passes validated pagination to Server Core", async () => {
+  test("passes a validated cursor query to Server Core", async () => {
     let received: unknown;
     const handler = createRequestHandler({
       accessToken: token,
       core: createCore(async (params) => {
         received = params;
-        return { items: [], total: 0, ...params };
+        return { items: [], hasMore: false, warnings: [] };
       }),
     });
     const response = await handler(
-      new Request("http://localhost/api/v1/sessions?page=2&pageSize=20", {
+      new Request("http://localhost/api/v1/sessions?limit=20&cursor=opaque", {
         headers: authorization,
       }),
     );
 
     expect(response.status).toBe(200);
-    expect(received).toEqual({ page: 2, pageSize: 20 });
+    expect(received).toEqual({ limit: 20, cursor: "opaque" });
   });
 
-  test("rejects invalid pagination", async () => {
+  test("rejects an invalid batch size", async () => {
     const handler = createRequestHandler({ accessToken: token, core: createCore() });
     const response = await handler(
-      new Request("http://localhost/api/v1/sessions?page=0", {
+      new Request("http://localhost/api/v1/sessions?limit=25", {
         headers: authorization,
       }),
     );
@@ -68,11 +74,17 @@ describe("Server HTTP API", () => {
     expect(response.status).toBe(400);
   });
 
-  test("maps an unavailable Collector to 503", async () => {
+  test("maps unavailable Collectors to 503", async () => {
     const handler = createRequestHandler({
       accessToken: token,
       core: createCore(() => {
-        throw new CollectorUnavailableError("OpenCode unavailable");
+        throw new CollectorQueryFailedError([
+          {
+            collectorId: "local",
+            collectorName: "Local",
+            message: "OpenCode unavailable",
+          },
+        ]);
       }),
     });
     const response = await handler(
@@ -85,8 +97,35 @@ describe("Server HTTP API", () => {
     expect(await response.json()).toEqual({
       error: {
         code: "collector_unavailable",
-        message: "OpenCode unavailable",
+        message: "当前没有 Collector 能够完成 Session 查询。",
       },
+    });
+  });
+
+  test("returns the connected Collector list", async () => {
+    const core = createCore();
+    core.listCollectors = () => [
+      {
+        id: "local",
+        name: "Local",
+        hostname: "localhost",
+        version: "0.0.1",
+        agents: ["opencode"],
+        connectionType: "local",
+        connectedAt: 100,
+        lastSeenAt: 100,
+      },
+    ];
+    const handler = createRequestHandler({ accessToken: token, core });
+    const response = await handler(
+      new Request("http://localhost/api/v1/collectors", {
+        headers: authorization,
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      items: [expect.objectContaining({ id: "local" })],
     });
   });
 });

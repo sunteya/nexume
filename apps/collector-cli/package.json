@@ -1,16 +1,16 @@
 {
-  "name": "@nexume/collector-core",
+  "name": "@nexume/collector-cli",
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "exports": "./src/index.ts",
   "scripts": {
+    "start": "bun src/index.ts",
     "test": "bun test",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@nexume/contracts": "workspace:*",
-    "socket.io-client": "^4.8.3"
+    "@nexume/collector-core": "workspace:*",
+    "@nexume/contracts": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "latest",

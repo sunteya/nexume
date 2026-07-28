@@ -1,9 +1,11 @@
 import { resolve } from "node:path";
+import { hostname as getHostname } from "node:os";
 
 import { OpenCodeCollector } from "@nexume/collector-core";
 import { createServerCore } from "@nexume/server-core";
 
 import { createRequestHandler } from "./http";
+import { createCollectorSocketServer } from "./collector-socket";
 
 function readPort(value: string | undefined): number {
   const port = Number(value ?? 3000);
@@ -19,13 +21,34 @@ const accessToken = process.env.NEXUME_ACCESS_TOKEN?.trim();
 if (!accessToken) {
   throw new Error("启动 Server 前必须设置 NEXUME_ACCESS_TOKEN。");
 }
+const collectorToken = process.env.NEXUME_COLLECTOR_TOKEN?.trim();
+if (!collectorToken) {
+  throw new Error("启动 Server 前必须设置 NEXUME_COLLECTOR_TOKEN。");
+}
 
 const hostname = process.env.HOST?.trim() || "0.0.0.0";
 const port = readPort(process.env.PORT);
 const collector = new OpenCodeCollector({
   databasePath: process.env.OPENCODE_DB_PATH,
 });
-const core = createServerCore(collector);
+const core = createServerCore();
+core.registerCollector({
+  descriptor: {
+    id: "local",
+    name: "Server Local",
+    hostname: getHostname(),
+    version: "0.0.1",
+    agents: ["opencode"],
+  },
+  connectionType: "local",
+  source: collector,
+});
+const collectorSockets = createCollectorSocketServer({
+  collectorToken,
+  core,
+  onError: (error) => console.error(error),
+});
+const collectorSocketHandler = collectorSockets.engine.handler();
 const handler = createRequestHandler({
   accessToken,
   core,
@@ -33,9 +56,14 @@ const handler = createRequestHandler({
   onError: (error) => console.error(error),
 });
 const server = Bun.serve({
+  ...collectorSocketHandler,
   hostname,
   port,
-  fetch: handler,
+  fetch(request, bunServer) {
+    return new URL(request.url).pathname.startsWith("/socket.io/")
+      ? collectorSocketHandler.fetch(request, bunServer)
+      : handler(request);
+  },
   error(error) {
     console.error(error);
     return Response.json(
@@ -53,6 +81,7 @@ console.log(
 );
 
 async function stop(): Promise<void> {
+  collectorSockets.close();
   await server.stop();
   process.exit(0);
 }

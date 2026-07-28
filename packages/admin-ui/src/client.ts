@@ -1,8 +1,8 @@
 import type {
   ListSessionsParams,
-  SessionPage,
+  SessionBatch,
 } from "@nexume/contracts";
 
 export interface SessionClient {
-  listSessions(params: ListSessionsParams): Promise<SessionPage>;
+  listSessions(params: ListSessionsParams): Promise<SessionBatch>;
 }

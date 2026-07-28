@@ -49,7 +49,7 @@ function createDatabase(schema = true): string {
 
     for (let index = 1; index <= 25; index += 1) {
       insert.run(
-        `session-${index}`,
+        `session-${String(index).padStart(2, "0")}`,
         `Session ${index}`,
         null,
         index * 100,
@@ -73,11 +73,11 @@ afterEach(() => {
 });
 
 describe("OpenCodeCollector", () => {
-  test("returns active root sessions in updated order", () => {
+  test("returns active root sessions in stable updated order", () => {
     const collector = new OpenCodeCollector({ databasePath: createDatabase() });
-    const result = collector.listSessions({ page: 1, pageSize: 20 });
+    const result = collector.querySessions({ asOf: 10_000, limit: 20 });
 
-    expect(result.total).toBe(25);
+    expect(result.hasMore).toBe(true);
     expect(result.items).toHaveLength(20);
     expect(result.items[0]).toMatchObject({
       id: "session-25",
@@ -87,13 +87,18 @@ describe("OpenCodeCollector", () => {
     expect(result.items.some((session) => session.id === "archived")).toBe(false);
   });
 
-  test("returns the last valid page when page is out of range", () => {
+  test("continues strictly after a cursor", () => {
     const collector = new OpenCodeCollector({ databasePath: createDatabase() });
-    const result = collector.listSessions({ page: 99, pageSize: 20 });
+    const result = collector.querySessions({
+      asOf: 10_000,
+      limit: 20,
+      cursor: { updatedAt: 2_100, agent: "opencode", id: "session-21" },
+    });
 
-    expect(result.page).toBe(2);
-    expect(result.items).toHaveLength(5);
-    expect(result.items.at(-1)?.id).toBe("session-1");
+    expect(result.hasMore).toBe(false);
+    expect(result.items).toHaveLength(20);
+    expect(result.items[0]?.id).toBe("session-20");
+    expect(result.items.at(-1)?.id).toBe("session-01");
   });
 
   test("reports a missing database", () => {
@@ -101,7 +106,7 @@ describe("OpenCodeCollector", () => {
       databasePath: "/path/that/does/not/exist.db",
     });
 
-    expect(() => collector.listSessions({ page: 1, pageSize: 20 })).toThrow(
+    expect(() => collector.querySessions({ asOf: 10_000, limit: 20 })).toThrow(
       CollectorUnavailableError,
     );
   });
@@ -111,7 +116,7 @@ describe("OpenCodeCollector", () => {
       databasePath: createDatabase(false),
     });
 
-    expect(() => collector.listSessions({ page: 1, pageSize: 20 })).toThrow(
+    expect(() => collector.querySessions({ asOf: 10_000, limit: 20 })).toThrow(
       UnsupportedCollectorDataError,
     );
   });

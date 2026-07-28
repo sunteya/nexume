@@ -1,5 +1,6 @@
 import { BrowserView, BrowserWindow, Updater } from "electrobun/bun";
 import { request } from "node:http";
+import { hostname } from "node:os";
 
 import { OpenCodeCollector } from "@nexume/collector-core";
 import { createServerCore } from "@nexume/server-core";
@@ -10,7 +11,18 @@ const devServerUrl = "http://localhost:5173";
 const collector = new OpenCodeCollector({
   databasePath: process.env.OPENCODE_DB_PATH,
 });
-const core = createServerCore(collector);
+const core = createServerCore();
+core.registerCollector({
+  descriptor: {
+    id: "local",
+    name: "Desktop Local",
+    hostname: hostname(),
+    version: "0.0.1",
+    agents: ["opencode"],
+  },
+  connectionType: "local",
+  source: collector,
+});
 
 function isDevServerRunning(): Promise<boolean> {
   return new Promise((resolve) => {

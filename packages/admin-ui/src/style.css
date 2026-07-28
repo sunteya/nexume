@@ -111,7 +111,8 @@ select {
   margin-left: auto;
 }
 
-.error-alert {
+.error-alert,
+.warning-alert {
   flex: 0 0 auto;
   border-radius: 0;
 }
@@ -173,7 +174,7 @@ select {
   font-size: 11px;
 }
 
-.pagination-bar {
+.load-more-bar {
   display: flex;
   min-height: 62px;
   flex: 0 0 auto;
@@ -184,16 +185,6 @@ select {
   color: #6a7571;
   background: #f7f8f8;
   font-size: 12px;
-}
-
-.pagination-bar .el-pagination {
-  min-width: 0;
-}
-
-.pagination-bar .el-pager li,
-.pagination-bar .btn-prev,
-.pagination-bar .btn-next {
-  border-radius: 4px;
 }
 
 @media (max-width: 620px) {
@@ -207,13 +198,12 @@ select {
     padding-left: 12px;
   }
 
-  .pagination-bar {
-    align-items: flex-end;
+  .load-more-bar {
     padding-right: 12px;
     padding-left: 12px;
   }
 
-  .pagination-bar > span {
+  .load-more-bar > span:first-child {
     display: none;
   }
 }
@@ -225,7 +215,7 @@ html.dark {
 
 html.dark .app-shell,
 html.dark .table-region,
-html.dark .pagination-bar {
+html.dark .load-more-bar {
   background: #181e1c;
 }
 
@@ -250,7 +240,7 @@ html.dark .session-title {
 }
 
 html.dark .source-line,
-html.dark .pagination-bar,
+html.dark .load-more-bar,
 html.dark .updated-time,
 html.dark .session-id {
   color: #9eaaa6;

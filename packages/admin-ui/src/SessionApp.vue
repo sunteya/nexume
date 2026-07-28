@@ -4,7 +4,6 @@ import {
   ElButton,
   ElConfigProvider,
   ElEmpty,
-  ElPagination,
   ElTable,
   ElTableColumn,
   ElTag,
@@ -12,13 +11,12 @@ import {
   type TableInstance,
 } from "element-plus";
 import zhCn from "element-plus/es/locale/lang/zh-cn";
-import { RefreshCw } from "lucide-vue-next";
+import { ChevronDown, RefreshCw } from "lucide-vue-next";
 import { computed, nextTick, onMounted, ref } from "vue";
 
-import {
-  sessionPageSizes,
-  type SessionSummary,
-  type SessionPageSize,
+import type {
+  CollectorQueryWarning,
+  SessionSummary,
 } from "@nexume/contracts";
 
 import type { SessionClient } from "./client";
@@ -46,20 +44,31 @@ const relativeTimeFormatter = new Intl.RelativeTimeFormat("zh-CN", {
 });
 
 const sessions = ref<SessionSummary[]>([]);
-const total = ref(0);
-const page = ref(1);
-const pageSize = ref<SessionPageSize>(50);
+const nextCursor = ref<string>();
+const hasMore = ref(false);
+const warnings = ref<CollectorQueryWarning[]>([]);
 const loading = ref(false);
 const errorMessage = ref("");
 const table = ref<TableInstance>();
 let latestRequest = 0;
 
 const resultSummary = computed(() =>
-  total.value === 0 ? "尚无 Session" : `共 ${total.value.toLocaleString("zh-CN")} 条`,
+  sessions.value.length === 0
+    ? "尚无 Session"
+    : `已加载 ${sessions.value.length.toLocaleString("zh-CN")} 条`,
+);
+const warningMessage = computed(() =>
+  warnings.value
+    .map((warning) => `${warning.collectorName}：${warning.message}`)
+    .join("；"),
 );
 
 function getProjectName(directory: string): string {
   return directory.split(/[\\/]/).filter(Boolean).at(-1) ?? directory;
+}
+
+function getRowKey(session: SessionSummary): string {
+  return `${session.collectorId}:${session.agent}:${session.id}`;
 }
 
 function formatExactTime(timestamp: number): string {
@@ -92,47 +101,49 @@ function formatRelativeTime(timestamp: number): string {
   return formatExactTime(timestamp);
 }
 
-async function loadSessions(requestedPage = page.value): Promise<void> {
+async function loadSessions(append = false): Promise<void> {
+  if (loading.value || (append && !hasMore.value)) return;
+
   const requestId = ++latestRequest;
   loading.value = true;
   errorMessage.value = "";
 
   try {
     const result = await props.client.listSessions({
-      page: requestedPage,
-      pageSize: pageSize.value,
+      limit: 50,
+      cursor: append ? nextCursor.value : undefined,
     });
 
     if (requestId !== latestRequest) return;
 
-    sessions.value = result.items;
-    total.value = result.total;
-    page.value = result.page;
-    pageSize.value = result.pageSize;
+    sessions.value = append
+      ? [...sessions.value, ...result.items]
+      : result.items;
+    nextCursor.value = result.nextCursor;
+    hasMore.value = result.hasMore;
+    warnings.value = append
+      ? [
+          ...new Map(
+            [...warnings.value, ...result.warnings].map((warning) => [
+              warning.collectorId,
+              warning,
+            ]),
+          ).values(),
+        ]
+      : result.warnings;
     await nextTick();
-    table.value?.setScrollTop(0);
-    table.value?.setScrollLeft(0);
+
+    if (!append) {
+      table.value?.setScrollTop(0);
+      table.value?.setScrollLeft(0);
+    }
   } catch (error) {
     if (requestId !== latestRequest) return;
-
     errorMessage.value =
-      error instanceof Error ? error.message : "读取 OpenCode Session 失败。";
+      error instanceof Error ? error.message : "读取 Session 失败。";
   } finally {
     if (requestId === latestRequest) loading.value = false;
   }
-}
-
-function handlePageChange(nextPage: number): void {
-  page.value = nextPage;
-  void loadSessions(nextPage);
-}
-
-function handlePageSizeChange(nextPageSize: number): void {
-  if (!sessionPageSizes.includes(nextPageSize as SessionPageSize)) return;
-
-  pageSize.value = nextPageSize as SessionPageSize;
-  page.value = 1;
-  void loadSessions(1);
 }
 
 onMounted(() => void loadSessions());
@@ -162,7 +173,7 @@ onMounted(() => void loadSessions());
             circle
             :loading="loading"
             aria-label="刷新 Session"
-            @click="loadSessions()"
+            @click="loadSessions(false)"
           >
             <refresh-cw :size="17" :stroke-width="1.8" />
           </el-button>
@@ -178,9 +189,18 @@ onMounted(() => void loadSessions());
         :closable="false"
       >
         <template #default>
-          <el-button size="small" @click="loadSessions()">重新加载</el-button>
+          <el-button size="small" @click="loadSessions(false)">重新加载</el-button>
         </template>
       </el-alert>
+
+      <el-alert
+        v-if="warningMessage"
+        class="warning-alert"
+        :title="warningMessage"
+        type="warning"
+        show-icon
+        :closable="false"
+      />
 
       <section class="table-region" aria-label="OpenCode Session 列表">
         <el-table
@@ -188,13 +208,19 @@ onMounted(() => void loadSessions());
           v-loading="loading"
           :data="sessions"
           height="100%"
-          row-key="id"
+          :row-key="getRowKey"
           table-layout="fixed"
           scrollbar-always-on
         >
-          <el-table-column label="标题" min-width="260" show-overflow-tooltip>
+          <el-table-column label="标题" min-width="250" show-overflow-tooltip>
             <template #default="{ row }">
               <span class="session-title">{{ row.title || "未命名 Session" }}</span>
+            </template>
+          </el-table-column>
+
+          <el-table-column label="来源" width="130" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ row.collectorName }}
             </template>
           </el-table-column>
 
@@ -207,7 +233,7 @@ onMounted(() => void loadSessions());
           <el-table-column
             prop="directory"
             label="目录"
-            min-width="280"
+            min-width="260"
             show-overflow-tooltip
           />
 
@@ -228,29 +254,23 @@ onMounted(() => void loadSessions());
           <template #empty>
             <el-empty
               :image-size="64"
-              :description="
-                errorMessage ? '暂时无法读取 Session' : '未发现 OpenCode Session'
-              "
+              :description="errorMessage ? '暂时无法读取 Session' : '未发现 OpenCode Session'"
             />
           </template>
         </el-table>
       </section>
 
-      <footer class="pagination-bar">
+      <footer class="load-more-bar">
         <span>{{ resultSummary }}</span>
-        <el-pagination
-          v-if="total > 0"
-          :current-page="page"
-          :page-size="pageSize"
-          :page-sizes="[...sessionPageSizes]"
-          :total="total"
-          :pager-count="5"
-          layout="sizes, prev, pager, next"
-          background
-          size="small"
-          @update:current-page="handlePageChange"
-          @update:page-size="handlePageSizeChange"
-        />
+        <el-button
+          v-if="hasMore"
+          :loading="loading"
+          :icon="ChevronDown"
+          @click="loadSessions(true)"
+        >
+          加载更多
+        </el-button>
+        <span v-else-if="sessions.length > 0">已加载全部</span>
       </footer>
     </main>
   </el-config-provider>

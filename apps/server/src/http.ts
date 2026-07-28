@@ -2,15 +2,15 @@ import { timingSafeEqual } from "node:crypto";
 import { resolve, sep } from "node:path";
 
 import {
-  CollectorUnavailableError,
-  UnsupportedCollectorDataError,
-} from "@nexume/collector-core";
-import {
   assertListSessionsParams,
   type ListSessionsParams,
-  type SessionPageSize,
+  type SessionBatchSize,
 } from "@nexume/contracts";
-import type { ServerCore } from "@nexume/server-core";
+import {
+  CollectorQueryFailedError,
+  InvalidSessionCursorError,
+  type ServerCore,
+} from "@nexume/server-core";
 
 interface ErrorBody {
   error: {
@@ -45,11 +45,11 @@ function hasValidToken(request: Request, expectedToken: string): boolean {
 }
 
 function parseSessionParams(url: URL): ListSessionsParams {
-  const pageValue = url.searchParams.get("page");
-  const pageSizeValue = url.searchParams.get("pageSize");
+  const limitValue = url.searchParams.get("limit");
+  const cursor = url.searchParams.get("cursor") ?? undefined;
   const params = {
-    page: pageValue === null ? 1 : Number(pageValue),
-    pageSize: (pageSizeValue === null ? 50 : Number(pageSizeValue)) as SessionPageSize,
+    limit: (limitValue === null ? 50 : Number(limitValue)) as SessionBatchSize,
+    cursor,
   };
 
   assertListSessionsParams(params);
@@ -112,16 +112,21 @@ export function createRequestHandler(options: RequestHandlerOptions) {
         try {
           return json(await options.core.listSessions(params));
         } catch (error) {
-          if (
-            error instanceof CollectorUnavailableError ||
-            error instanceof UnsupportedCollectorDataError
-          ) {
+          if (error instanceof InvalidSessionCursorError) {
+            return errorResponse("invalid_request", error.message, 400);
+          }
+
+          if (error instanceof CollectorQueryFailedError) {
             return errorResponse("collector_unavailable", error.message, 503);
           }
 
           options.onError?.(error);
           return errorResponse("internal_error", "Server 内部错误。", 500);
         }
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/v1/collectors") {
+        return json({ items: options.core.listCollectors() });
       }
 
       return errorResponse("not_found", "API 不存在。", 404);

@@ -1,5 +1,5 @@
 import type { SessionClient } from "@nexume/admin-ui";
-import type { SessionPage } from "@nexume/contracts";
+import type { SessionBatch } from "@nexume/contracts";
 
 interface ApiErrorBody {
   error?: {
@@ -14,8 +14,8 @@ export function createHttpSessionClient(
   return {
     async listSessions(params) {
       const url = new URL("/api/v1/sessions", window.location.origin);
-      url.searchParams.set("page", String(params.page));
-      url.searchParams.set("pageSize", String(params.pageSize));
+      url.searchParams.set("limit", String(params.limit));
+      if (params.cursor) url.searchParams.set("cursor", params.cursor);
 
       const response = await fetch(url, {
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -31,7 +31,7 @@ export function createHttpSessionClient(
         throw new Error(body.error?.message ?? "读取 Session 失败。");
       }
 
-      return (await response.json()) as SessionPage;
+      return (await response.json()) as SessionBatch;
     },
   };
 }

@@ -10,4 +10,4 @@ Nexume is planned to support desktop, server, Docker, and CLI use cases on Windo
 
 ## Status
 
-The project is in early implementation. The current Desktop and Server applications share the same core packages and admin UI, and can directly browse local OpenCode sessions in read-only mode. Session persistence, remote collectors, Codex, MCP, and full management capabilities remain planned work.
+The project is in early implementation. Desktop supports local read-only OpenCode browsing. Server starts an internal OpenCode Collector and accepts authenticated remote Collectors over Socket.IO; it merges live collector queries with cursor-based loading. Session persistence, Codex, MCP, search, and full management capabilities remain planned work.

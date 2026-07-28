@@ -2,7 +2,7 @@ import type { RPCSchema } from "electrobun";
 
 import type {
   ListSessionsParams,
-  SessionPage,
+  SessionBatch,
 } from "@nexume/contracts";
 
 export type DesktopRPC = {
@@ -10,7 +10,7 @@ export type DesktopRPC = {
     requests: {
       listSessions: {
         params: ListSessionsParams;
-        response: SessionPage;
+        response: SessionBatch;
       };
     };
     messages: {};

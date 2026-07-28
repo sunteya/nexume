@@ -2,6 +2,6 @@
 
 提供可复用的 AI Agent 数据采集能力。
 
-主要包含 Agent 检测、Session 扫描与解析、变更识别、同步状态和受控文件操作。Codex 与 OpenCode 适配器初期作为本模块的内部目录维护。
+当前包含 OpenCode 游标查询和可复用的 Socket.IO Collector 连接运行时。连接运行时负责自动重连、状态上报以及响应 Server 下发的 Session 查询。
 
 本模块不依赖 `server-core` 或任何 GUI。

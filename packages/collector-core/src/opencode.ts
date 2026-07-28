@@ -4,15 +4,11 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import {
-  assertListSessionsParams,
-  type ListSessionsParams,
-  type SessionPage,
-  type SessionSummary,
+  assertCollectorSessionQuery,
+  type CollectedSessionSummary,
+  type CollectorSessionBatch,
+  type CollectorSessionQuery,
 } from "@nexume/contracts";
-
-interface CountRow {
-  total: number;
-}
 
 interface SessionRow {
   id: string;
@@ -55,8 +51,8 @@ export class OpenCodeCollector {
     return existsSync(this.databasePath);
   }
 
-  listSessions(params: ListSessionsParams): SessionPage {
-    assertListSessionsParams(params);
+  querySessions(query: CollectorSessionQuery): CollectorSessionBatch {
+    assertCollectorSessionQuery(query);
 
     if (!this.available) {
       throw new CollectorUnavailableError(
@@ -70,41 +66,47 @@ export class OpenCodeCollector {
     });
 
     try {
-      const filters = "parent_id IS NULL AND time_archived IS NULL";
-      const count = database
-        .query<CountRow, []>(
-          `SELECT COUNT(*) AS total FROM session WHERE ${filters}`,
-        )
-        .get();
-      const total = count?.total ?? 0;
-      const lastPage = Math.max(1, Math.ceil(total / params.pageSize));
-      const page = Math.min(params.page, lastPage);
-      const offset = (page - 1) * params.pageSize;
+      const conditions = [
+        "parent_id IS NULL",
+        "time_archived IS NULL",
+        "time_updated <= ?",
+      ];
+      const parameters: Array<number | string> = [query.asOf];
+
+      if (query.cursor) {
+        conditions.push(
+          "(time_updated < ? OR (time_updated = ? AND id > ?))",
+        );
+        parameters.push(
+          query.cursor.updatedAt,
+          query.cursor.updatedAt,
+          query.cursor.id,
+        );
+      }
+
+      parameters.push(query.limit + 1);
       const rows = database
-        .query<SessionRow, [number, number]>(
+        .query<SessionRow, Array<number | string>>(
           `SELECT id, title, directory, time_created, time_updated
            FROM session
-           WHERE ${filters}
-           ORDER BY time_updated DESC
-           LIMIT ? OFFSET ?`,
+           WHERE ${conditions.join(" AND ")}
+           ORDER BY time_updated DESC, id ASC
+           LIMIT ?`,
         )
-        .all(params.pageSize, offset);
+        .all(...parameters);
+      const hasMore = rows.length > query.limit;
+      const items: CollectedSessionSummary[] = rows
+        .slice(0, query.limit)
+        .map((row) => ({
+          id: row.id,
+          agent: "opencode",
+          title: row.title,
+          directory: row.directory,
+          createdAt: row.time_created,
+          updatedAt: row.time_updated,
+        }));
 
-      const items: SessionSummary[] = rows.map((row) => ({
-        id: row.id,
-        agent: "opencode",
-        title: row.title,
-        directory: row.directory,
-        createdAt: row.time_created,
-        updatedAt: row.time_updated,
-      }));
-
-      return {
-        items,
-        page,
-        pageSize: params.pageSize,
-        total,
-      };
+      return { items, hasMore };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
 

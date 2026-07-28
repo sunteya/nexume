@@ -10,4 +10,4 @@ Nexume 计划支持 Windows、macOS 和 Linux，并覆盖桌面端、服务器�
 
 ## 当前状态
 
-项目目前处于规划和技术验证阶段，尚未开始具体实现。
+项目目前处于早期实现阶段。当前提供可运行的 Desktop 和 Server：二者通过共享的 Core 与管理界面直接只读访问本机 OpenCode Session。Session 持久化、远程 Collector、Codex、MCP 和完整管理能力仍在后续规划中。

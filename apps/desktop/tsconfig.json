@@ -1,18 +1,9 @@
 {
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "target": "ESNext",
     "useDefineForClassFields": true,
-    "module": "ESNext",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "moduleDetection": "force",
-    "noEmit": true,
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true,
-    "moduleResolution": "bundler",
-    "skipLibCheck": true
+    "types": ["bun", "vite/client"],
+    "lib": ["ESNext", "DOM", "DOM.Iterable"]
   },
   "include": ["src", "scripts", "env.d.ts", "*.config.ts"],
   "exclude": ["node_modules", "dist", "build", "artifacts"]

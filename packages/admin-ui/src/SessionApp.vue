@@ -17,10 +17,21 @@ import { computed, nextTick, onMounted, ref } from "vue";
 
 import {
   sessionPageSizes,
-  type OpenCodeSessionSummary,
+  type SessionSummary,
   type SessionPageSize,
-} from "../shared/desktop-rpc";
-import { desktopRpc } from "./rpc";
+} from "@nexume/contracts";
+
+import type { SessionClient } from "./client";
+
+const props = withDefaults(
+  defineProps<{
+    client: SessionClient;
+    sourceLabel?: string;
+  }>(),
+  {
+    sourceLabel: "本机",
+  },
+);
 
 const dateFormatter = new Intl.DateTimeFormat("zh-CN", {
   year: "numeric",
@@ -34,7 +45,7 @@ const relativeTimeFormatter = new Intl.RelativeTimeFormat("zh-CN", {
   numeric: "auto",
 });
 
-const sessions = ref<OpenCodeSessionSummary[]>([]);
+const sessions = ref<SessionSummary[]>([]);
 const total = ref(0);
 const page = ref(1);
 const pageSize = ref<SessionPageSize>(50);
@@ -87,7 +98,7 @@ async function loadSessions(requestedPage = page.value): Promise<void> {
   errorMessage.value = "";
 
   try {
-    const result = await desktopRpc.request.listOpenCodeSessions({
+    const result = await props.client.listSessions({
       page: requestedPage,
       pageSize: pageSize.value,
     });
@@ -137,11 +148,13 @@ onMounted(() => void loadSessions());
           <h1>Sessions</h1>
           <div class="source-line">
             <el-tag effect="plain" size="small">OpenCode</el-tag>
-            <span>本机</span>
+            <span>{{ sourceLabel }}</span>
             <span class="source-separator" aria-hidden="true"></span>
             <span>{{ resultSummary }}</span>
           </div>
         </div>
+
+        <slot name="header-actions" />
 
         <el-tooltip content="刷新 Session" placement="bottom">
           <el-button
@@ -231,8 +244,10 @@ onMounted(() => void loadSessions());
           :page-size="pageSize"
           :page-sizes="[...sessionPageSizes]"
           :total="total"
+          :pager-count="5"
           layout="sizes, prev, pager, next"
           background
+          size="small"
           @update:current-page="handlePageChange"
           @update:page-size="handlePageSizeChange"
         />

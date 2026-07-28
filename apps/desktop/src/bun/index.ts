@@ -1,10 +1,16 @@
 import { BrowserView, BrowserWindow, Updater } from "electrobun/bun";
 import { request } from "node:http";
 
+import { OpenCodeCollector } from "@nexume/collector-core";
+import { createServerCore } from "@nexume/server-core";
+
 import type { DesktopRPC } from "../shared/desktop-rpc";
-import { listOpenCodeSessions } from "./opencode-sessions";
 
 const devServerUrl = "http://localhost:5173";
+const collector = new OpenCodeCollector({
+  databasePath: process.env.OPENCODE_DB_PATH,
+});
+const core = createServerCore(collector);
 
 function isDevServerRunning(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -41,7 +47,7 @@ const rpc = BrowserView.defineRPC<DesktopRPC>({
   maxRequestTime: 10_000,
   handlers: {
     requests: {
-      listOpenCodeSessions,
+      listSessions: (params) => core.listSessions(params),
     },
     messages: {},
   },

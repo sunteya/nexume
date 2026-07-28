@@ -1,0 +1,23 @@
+{
+  "name": "@nexume/admin-ui",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./style.css": "./src/style.css"
+  },
+  "scripts": {
+    "typecheck": "vue-tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@nexume/contracts": "workspace:*",
+    "element-plus": "^2.14.3",
+    "lucide-vue-next": "^1.0.0",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vue-tsc": "^2.2.0"
+  }
+}

@@ -1,14 +1,10 @@
 import { ElLoading } from "element-plus";
 import { createApp } from "vue";
 
-import {
-  SessionApp,
-  type SessionClient,
-} from "@nexume/admin-ui";
 import "@nexume/admin-ui/style.css";
 import "element-plus/theme-chalk/dark/css-vars.css";
-
-import { desktopRpc } from "./rpc";
+import "./web.css";
+import WebApp from "./WebApp.vue";
 
 const colorScheme = window.matchMedia("(prefers-color-scheme: dark)");
 
@@ -19,8 +15,4 @@ function syncColorScheme(event: MediaQueryList | MediaQueryListEvent): void {
 syncColorScheme(colorScheme);
 colorScheme.addEventListener("change", syncColorScheme);
 
-const client: SessionClient = {
-  listSessions: (params) => desktopRpc.request.listSessions(params),
-};
-
-createApp(SessionApp, { client }).use(ElLoading).mount("#app");
+createApp(WebApp).use(ElLoading).mount("#app");

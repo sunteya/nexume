@@ -4,7 +4,7 @@
 
 应用组合 `server-core`、`collector-core` 和 `admin-ui`，在不依赖外部 Server 或独立 Collector 的情况下提供本地采集与 Session 管理能力。
 
-当前项目使用 Electrobun、Vue 3、TypeScript 和 Vite。现阶段提供一个用于验证开发与发布链路的 Hello World 窗口。
+当前项目使用 Electrobun、Vue 3、TypeScript 和 Vite。应用启动时在进程内组合 `server-core` 与 OpenCode Collector，并通过 Electrobun RPC 向共享的 `admin-ui` 提供本机 Session 数据。
 
 ## 环境要求
 
@@ -16,7 +16,7 @@
 
 ```bash
 bun install
-bun start
+bun --filter @nexume/desktop start
 ```
 
 使用 Vite HMR：

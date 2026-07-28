@@ -10,4 +10,4 @@ Nexume is planned to support desktop, server, Docker, and CLI use cases on Windo
 
 ## Status
 
-This project is currently in the planning and technology validation stage. Implementation has not started yet.
+The project is in early implementation. The current Desktop and Server applications share the same core packages and admin UI, and can directly browse local OpenCode sessions in read-only mode. Session persistence, remote collectors, Codex, MCP, and full management capabilities remain planned work.

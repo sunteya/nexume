@@ -1,0 +1,15 @@
+{
+  "name": "nexume",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:server": "bun --filter @nexume/server dev",
+    "test": "bun run --parallel --filter '*' test",
+    "typecheck": "bun run --parallel --filter '*' typecheck",
+    "build": "bun run --filter @nexume/server build && bun run --filter @nexume/desktop build"
+  }
+}

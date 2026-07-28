@@ -1,5 +1,8 @@
-import { BrowserWindow, Updater } from "electrobun/bun";
+import { BrowserView, BrowserWindow, Updater } from "electrobun/bun";
 import { request } from "node:http";
+
+import type { DesktopRPC } from "../shared/desktop-rpc";
+import { listOpenCodeSessions } from "./opencode-sessions";
 
 const devServerUrl = "http://localhost:5173";
 
@@ -34,9 +37,20 @@ async function getMainViewUrl(): Promise<string> {
   return "views://mainview/index.html";
 }
 
+const rpc = BrowserView.defineRPC<DesktopRPC>({
+  maxRequestTime: 10_000,
+  handlers: {
+    requests: {
+      listOpenCodeSessions,
+    },
+    messages: {},
+  },
+});
+
 new BrowserWindow({
   title: "Nexume",
   url: await getMainViewUrl(),
+  rpc,
   frame: {
     width: 880,
     height: 580,

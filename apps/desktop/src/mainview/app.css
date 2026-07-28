@@ -1,6 +1,6 @@
 :root {
-  color: #18201e;
-  background: #f4f6f5;
+  color: #202624;
+  background: #f3f5f4;
   font-family:
     Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
@@ -16,162 +16,257 @@ html,
 body,
 #app {
   width: 100%;
+  height: 100%;
   min-width: 320px;
-  min-height: 100%;
   margin: 0;
 }
 
 body {
   min-height: 100vh;
+  overflow: hidden;
 }
 
-.shell {
-  position: relative;
-  display: grid;
-  min-height: 100vh;
-  place-items: center;
+button,
+input,
+select {
+  font: inherit;
+}
+
+.app-shell {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
   overflow: hidden;
-  padding: 48px;
-  background:
-    linear-gradient(90deg, #176b57 0 10px, transparent 10px),
-    #f4f6f5;
+  border-left: 6px solid #14705a;
+  background: #f7f8f8;
+}
+
+.app-header {
+  display: flex;
+  min-height: 94px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px 18px;
+  border-bottom: 1px solid #dfe4e2;
+  background: #ffffff;
 }
 
 .brand-mark {
-  position: absolute;
-  top: 32px;
-  left: 42px;
   display: grid;
-  width: 42px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
   place-items: center;
-  border: 1px solid #bed0ca;
+  border: 1px solid #b9ccc6;
   border-radius: 6px;
-  color: #176b57;
-  background: #ffffff;
-  font-size: 20px;
-  font-weight: 700;
+  color: #146651;
+  background: #f5faf8;
+  font-size: 19px;
+  font-weight: 720;
 }
 
-.welcome {
-  width: min(100%, 620px);
-  text-align: center;
+.page-heading {
+  min-width: 0;
 }
 
-.product-name {
-  margin: 0 0 18px;
-  color: #52625e;
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0;
-}
-
-h1 {
+.page-heading h1 {
   margin: 0;
-  color: #18201e;
-  font-size: clamp(42px, 8vh, 68px);
+  color: #1d2422;
+  font-size: 22px;
   font-weight: 680;
   letter-spacing: 0;
-  line-height: 1.08;
+  line-height: 1.2;
 }
 
-.summary {
-  margin: 20px 0 0;
-  color: #52625e;
-  font-size: 18px;
-  line-height: 1.6;
-}
-
-.runtime-status {
-  display: inline-flex;
+.source-line {
+  display: flex;
+  min-width: 0;
   align-items: center;
-  gap: 9px;
-  margin-top: 38px;
-  padding: 9px 12px;
-  border: 1px solid #ccd8d4;
-  border-radius: 6px;
-  color: #33443f;
-  background: #ffffff;
-  font-size: 13px;
-  font-weight: 600;
+  gap: 8px;
+  margin-top: 8px;
+  color: #65716d;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
 }
 
-.status-dot {
-  width: 8px;
-  height: 8px;
+.source-line .el-tag {
+  --el-tag-bg-color: #eff8f4;
+  --el-tag-border-color: #aed2c5;
+  --el-tag-text-color: #146651;
+}
+
+.source-separator {
+  width: 3px;
+  height: 3px;
   border-radius: 50%;
-  background: #1e8c70;
-  box-shadow: 0 0 0 3px #dcece7;
+  background: #a3aeaa;
 }
 
-footer {
-  position: absolute;
-  right: 32px;
-  bottom: 26px;
-  color: #74827e;
+.refresh-button {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.error-alert {
+  flex: 0 0 auto;
+  border-radius: 0;
+}
+
+.error-alert .el-alert__content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.table-region {
+  min-height: 0;
+  flex: 1 1 auto;
+  padding: 16px 20px 0;
+  background: #f7f8f8;
+}
+
+.table-region .el-table {
+  --el-table-border-color: #e2e6e4;
+  --el-table-header-bg-color: #f0f3f2;
+  --el-table-header-text-color: #58645f;
+  --el-table-row-hover-bg-color: #f1f7f5;
+  --el-table-text-color: #2b3431;
+  border: 1px solid #dfe4e2;
+  border-radius: 6px 6px 0 0;
+}
+
+.table-region .el-table th.el-table__cell {
+  height: 40px;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.table-region .el-table td.el-table__cell {
+  height: 43px;
+  padding: 0;
+  font-size: 13px;
+}
+
+.table-region .el-table .cell {
+  line-height: 1.35;
+}
+
+.session-title {
+  color: #1f2926;
+  font-weight: 570;
+}
+
+.updated-time {
+  color: #53615c;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.session-id {
+  color: #5d6965;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+}
+
+.pagination-bar {
+  display: flex;
+  min-height: 62px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 20px 12px;
+  color: #6a7571;
+  background: #f7f8f8;
   font-size: 12px;
 }
 
-@media (max-width: 560px) {
-  .shell {
-    padding: 40px 24px;
+.pagination-bar .el-pagination {
+  min-width: 0;
+}
+
+.pagination-bar .el-pager li,
+.pagination-bar .btn-prev,
+.pagination-bar .btn-next {
+  border-radius: 4px;
+}
+
+@media (max-width: 620px) {
+  .app-header {
+    min-height: 82px;
+    padding: 14px 16px;
   }
 
-  .brand-mark {
-    top: 24px;
-    left: 32px;
+  .table-region {
+    padding-right: 12px;
+    padding-left: 12px;
   }
 
-  h1 {
-    font-size: 44px;
+  .pagination-bar {
+    align-items: flex-end;
+    padding-right: 12px;
+    padding-left: 12px;
   }
 
-  .summary {
-    font-size: 16px;
-  }
-
-  footer {
-    right: 20px;
-    bottom: 18px;
+  .pagination-bar > span {
+    display: none;
   }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #edf3f1;
-    background: #171c1b;
-  }
+html.dark {
+  color: #dfe7e4;
+  background: #171c1b;
+}
 
-  .shell {
-    background:
-      linear-gradient(90deg, #42a98f 0 10px, transparent 10px),
-      #171c1b;
-  }
+html.dark .app-shell,
+html.dark .table-region,
+html.dark .pagination-bar {
+  background: #181e1c;
+}
 
-  .brand-mark,
-  .runtime-status {
-    border-color: #3a4844;
-    background: #212826;
-  }
+html.dark .app-shell {
+  border-left-color: #45a88d;
+}
 
-  .brand-mark {
-    color: #66c3ab;
-  }
+html.dark .app-header {
+  border-bottom-color: #323b38;
+  background: #202725;
+}
 
-  h1 {
-    color: #edf3f1;
-  }
+html.dark .brand-mark {
+  border-color: #40554e;
+  color: #73c7af;
+  background: #24312d;
+}
 
-  .product-name,
-  .summary {
-    color: #a8b5b1;
-  }
+html.dark .page-heading h1,
+html.dark .session-title {
+  color: #edf3f1;
+}
 
-  .runtime-status {
-    color: #d5dedb;
-  }
+html.dark .source-line,
+html.dark .pagination-bar,
+html.dark .updated-time,
+html.dark .session-id {
+  color: #9eaaa6;
+}
 
-  footer {
-    color: #84918d;
-  }
+html.dark .source-line .el-tag {
+  --el-tag-bg-color: #23332e;
+  --el-tag-border-color: #3a685a;
+  --el-tag-text-color: #80cbb6;
+}
+
+html.dark .table-region .el-table {
+  --el-table-border-color: #343d3a;
+  --el-table-header-bg-color: #222a27;
+  --el-table-header-text-color: #aab4b0;
+  --el-table-row-hover-bg-color: #26332f;
+  --el-table-text-color: #d8e0dd;
+  border-color: #343d3a;
 }

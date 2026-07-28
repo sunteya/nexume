@@ -44,6 +44,92 @@ describe("Server HTTP API", () => {
     expect(response.status).toBe(401);
   });
 
+  test("exposes initialization status without authentication", async () => {
+    const handler = createRequestHandler({
+      accessToken: token,
+      core: createCore(),
+      initialization: {
+        getStatus: () => ({ initialized: false }),
+        complete: () => ({ initialized: true, initializedAt: 100 }),
+      },
+    });
+    const response = await handler(
+      new Request("http://localhost/api/v1/setup/status"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ initialized: false });
+  });
+
+  test("uses the access token to complete initialization", async () => {
+    let initialized = false;
+    let initializedCallback = false;
+    const handler = createRequestHandler({
+      accessToken: token,
+      core: createCore(),
+      initialization: {
+        getStatus: () => ({ initialized }),
+        complete: () => {
+          initialized = true;
+          return { initialized: true, initializedAt: 100 };
+        },
+      },
+      onInitialized: () => {
+        initializedCallback = true;
+      },
+    });
+
+    const unauthorized = await handler(
+      new Request("http://localhost/api/v1/setup/complete", { method: "POST" }),
+    );
+    expect(unauthorized.status).toBe(401);
+
+    const completed = await handler(
+      new Request("http://localhost/api/v1/setup/complete", {
+        method: "POST",
+        headers: authorization,
+      }),
+    );
+    expect(completed.status).toBe(200);
+    expect(await completed.json()).toEqual({
+      initialized: true,
+      initializedAt: 100,
+    });
+    expect(initializedCallback).toBe(true);
+
+    const duplicate = await handler(
+      new Request("http://localhost/api/v1/setup/complete", {
+        method: "POST",
+        headers: authorization,
+      }),
+    );
+    expect(duplicate.status).toBe(409);
+  });
+
+  test("blocks business APIs until initialization completes", async () => {
+    const handler = createRequestHandler({
+      accessToken: token,
+      core: createCore(),
+      initialization: {
+        getStatus: () => ({ initialized: false }),
+        complete: () => ({ initialized: true }),
+      },
+    });
+    const response = await handler(
+      new Request("http://localhost/api/v1/sessions", {
+        headers: authorization,
+      }),
+    );
+
+    expect(response.status).toBe(428);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "setup_required",
+        message: "请先完成 Nexume 初始化。",
+      },
+    });
+  });
+
   test("passes a validated cursor query to Server Core", async () => {
     let received: unknown;
     const handler = createRequestHandler({

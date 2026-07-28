@@ -3,6 +3,7 @@ import { resolve, sep } from "node:path";
 
 import {
   assertListSessionsParams,
+  type InitializationStatus,
   type ListSessionsParams,
   type SessionBatchSize,
 } from "@nexume/contracts";
@@ -22,6 +23,11 @@ interface ErrorBody {
 export interface RequestHandlerOptions {
   accessToken: string;
   core: ServerCore;
+  initialization?: {
+    getStatus(): InitializationStatus;
+    complete(): InitializationStatus;
+  };
+  onInitialized?: () => void;
   webRoot?: string;
   onError?: (error: unknown) => void;
 }
@@ -90,12 +96,50 @@ export function createRequestHandler(options: RequestHandlerOptions) {
       return json({ status: "ok" });
     }
 
+    if (request.method === "GET" && url.pathname === "/api/v1/setup/status") {
+      return json(options.initialization?.getStatus() ?? { initialized: true });
+    }
+
     if (url.pathname.startsWith("/api/")) {
       if (!hasValidToken(request, options.accessToken)) {
         return errorResponse(
           "unauthorized",
           "访问令牌无效或缺失。",
           401,
+        );
+      }
+
+      if (
+        request.method === "POST" &&
+        url.pathname === "/api/v1/setup/complete"
+      ) {
+        if (!options.initialization) {
+          return errorResponse("not_found", "API 不存在。", 404);
+        }
+
+        if (options.initialization.getStatus().initialized) {
+          return errorResponse(
+            "already_initialized",
+            "Nexume 已经完成初始化。",
+            409,
+          );
+        }
+
+        try {
+          const status = options.initialization.complete();
+          options.onInitialized?.();
+          return json(status);
+        } catch (error) {
+          options.onError?.(error);
+          return errorResponse("internal_error", "初始化 Nexume 失败。", 500);
+        }
+      }
+
+      if (options.initialization && !options.initialization.getStatus().initialized) {
+        return errorResponse(
+          "setup_required",
+          "请先完成 Nexume 初始化。",
+          428,
         );
       }
 

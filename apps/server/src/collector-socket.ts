@@ -20,6 +20,7 @@ import { Server as SocketIOServer, type Socket } from "socket.io";
 export interface CollectorSocketServerOptions {
   collectorToken: string;
   core: ServerCore;
+  isInitialized?: () => boolean;
   queryTimeout?: number;
   onError?: (error: unknown) => void;
 }
@@ -91,6 +92,10 @@ export function createCollectorSocketServer(
 
   namespace.use((socket, next) => {
     try {
+      if (options.isInitialized && !options.isInitialized()) {
+        throw new Error("请先完成 Nexume 初始化。");
+      }
+
       if (!tokensEqual(socket.handshake.auth.token, options.collectorToken)) {
         throw new Error("Collector 连接凭证无效。");
       }

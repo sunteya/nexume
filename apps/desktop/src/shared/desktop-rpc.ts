@@ -1,6 +1,7 @@
 import type { RPCSchema } from "electrobun";
 
 import type {
+  InitializationStatus,
   ListSessionsParams,
   SessionBatch,
 } from "@nexume/contracts";
@@ -11,6 +12,14 @@ export type DesktopRPC = {
       listSessions: {
         params: ListSessionsParams;
         response: SessionBatch;
+      };
+      getInitializationStatus: {
+        params: undefined;
+        response: InitializationStatus;
+      };
+      completeInitialization: {
+        params: Record<string, never>;
+        response: InitializationStatus;
       };
     };
     messages: {};

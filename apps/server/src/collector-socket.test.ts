@@ -20,6 +20,44 @@ afterEach(async () => {
 });
 
 describe("Collector Socket.IO transport", () => {
+  test("rejects Collectors before initialization", async () => {
+    const core = createServerCore();
+    const transport = createCollectorSocketServer({
+      collectorToken: "collector-token",
+      core,
+      isInitialized: () => false,
+    });
+    const handler = transport.engine.handler();
+    const server = Bun.serve({ port: 0, ...handler });
+    cleanups.push(() => server.stop(true));
+    cleanups.push(() => transport.close());
+
+    let connectionError = "";
+    const connection = new CollectorConnection({
+      serverUrl: `http://127.0.0.1:${server.port}`,
+      token: "collector-token",
+      descriptor: {
+        id: "blocked-test",
+        name: "Blocked Test",
+        hostname: "remote.local",
+        version: "0.0.1",
+        agents: ["opencode"],
+      },
+      source: {
+        available: true,
+        querySessions: () => ({ items: [], hasMore: false }),
+      },
+      onStateChange(_state, detail) {
+        if (detail?.includes("初始化")) connectionError = detail;
+      },
+    });
+    cleanups.push(() => connection.disconnect());
+
+    connection.connect();
+    await waitFor(() => Boolean(connectionError));
+    expect(core.listCollectors()).toHaveLength(0);
+  });
+
   test("registers, queries and removes a remote Collector", async () => {
     const core = createServerCore();
     const transport = createCollectorSocketServer({

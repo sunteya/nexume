@@ -32,6 +32,74 @@ select {
   font: inherit;
 }
 
+.initialization-shell {
+  display: grid;
+  width: 100%;
+  min-height: 100%;
+  place-items: center;
+  padding: 24px;
+  border-left: 6px solid #14705a;
+  background: #f7f8f8;
+}
+
+.initialization-panel {
+  width: min(100%, 380px);
+}
+
+.initialization-brand {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border: 1px solid #b9ccc6;
+  border-radius: 6px;
+  color: #146651;
+  background: #f5faf8;
+  font-size: 21px;
+  font-weight: 720;
+}
+
+.initialization-panel h1 {
+  margin: 22px 0 0;
+  color: #1d2422;
+  font-size: 27px;
+  font-weight: 680;
+  letter-spacing: 0;
+}
+
+.initialization-panel p {
+  margin: 8px 0 24px;
+  color: #65716d;
+  font-size: 14px;
+}
+
+.initialization-form {
+  display: grid;
+  gap: 12px;
+}
+
+.initialization-form .el-button {
+  width: 100%;
+  border-radius: 6px;
+}
+
+.initialization-error {
+  color: #c0362c;
+  font-size: 12px;
+}
+
+.initialization-spinner {
+  margin-top: 28px;
+  color: #14705a;
+  animation: initialization-spin 0.9s linear infinite;
+}
+
+@keyframes initialization-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .app-shell {
   display: flex;
   width: 100%;
@@ -211,6 +279,25 @@ select {
 html.dark {
   color: #dfe7e4;
   background: #171c1b;
+}
+
+html.dark .initialization-shell {
+  border-left-color: #45a88d;
+  background: #181e1c;
+}
+
+html.dark .initialization-brand {
+  border-color: #40554e;
+  color: #73c7af;
+  background: #24312d;
+}
+
+html.dark .initialization-panel h1 {
+  color: #edf3f1;
+}
+
+html.dark .initialization-panel p {
+  color: #9eaaa6;
 }
 
 html.dark .app-shell,

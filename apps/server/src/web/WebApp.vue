@@ -1,16 +1,25 @@
 <script setup lang="ts">
-import { SessionApp, type SessionClient } from "@nexume/admin-ui";
+import {
+  InitializationApp,
+  SessionApp,
+  type SessionClient,
+} from "@nexume/admin-ui";
 import { ElButton, ElInput, ElTooltip } from "element-plus";
 import { KeyRound, LogOut } from "lucide-vue-next";
 import { ref, shallowRef } from "vue";
 
-import { createHttpSessionClient } from "./http-client";
+import {
+  createHttpInitializationClient,
+  createHttpSessionClient,
+} from "./http-client";
 
 const storageKey = "nexume.accessToken";
 const accessToken = ref(sessionStorage.getItem(storageKey) ?? "");
 const tokenInput = ref("");
 const authError = ref("");
 const client = shallowRef<SessionClient>();
+const initializationReady = ref(false);
+const initializationClient = createHttpInitializationClient();
 
 function clearAccessToken(): void {
   sessionStorage.removeItem(storageKey);
@@ -47,10 +56,26 @@ function connect(): void {
   tokenInput.value = "";
   authError.value = "";
 }
+
+function handleInitialized(token: string): void {
+  if (token) {
+    sessionStorage.setItem(storageKey, token);
+    accessToken.value = token;
+    client.value = createClient(token);
+  }
+  initializationReady.value = true;
+}
 </script>
 
 <template>
-  <session-app v-if="client" :client="client" source-label="Server">
+  <initialization-app
+    v-if="!initializationReady"
+    :client="initializationClient"
+    requires-access-token
+    @initialized="handleInitialized"
+  />
+
+  <session-app v-else-if="client" :client="client" source-label="Server">
     <template #header-actions>
       <el-tooltip content="断开 Server" placement="bottom">
         <el-button circle aria-label="断开 Server" @click="disconnect">

@@ -72,6 +72,11 @@ export interface CollectorStatus {
   message?: string;
 }
 
+export interface InitializationStatus {
+  initialized: boolean;
+  initializedAt?: number;
+}
+
 export interface CollectorQueryError {
   code: string;
   message: string;

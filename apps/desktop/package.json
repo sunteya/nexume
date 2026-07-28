@@ -18,6 +18,7 @@
     "@nexume/collector-core": "workspace:*",
     "@nexume/contracts": "workspace:*",
     "@nexume/server-core": "workspace:*",
+    "@nexume/storage": "workspace:*",
     "electrobun": "1.18.1",
     "element-plus": "^2.14.3",
     "lucide-vue-next": "^1.0.0",

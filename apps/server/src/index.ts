@@ -3,6 +3,7 @@ import { hostname as getHostname } from "node:os";
 
 import { OpenCodeCollector } from "@nexume/collector-core";
 import { createServerCore } from "@nexume/server-core";
+import { openStorage } from "@nexume/storage";
 
 import { createRequestHandler } from "./http";
 import { createCollectorSocketServer } from "./collector-socket";
@@ -28,30 +29,44 @@ if (!collectorToken) {
 
 const hostname = process.env.HOST?.trim() || "0.0.0.0";
 const port = readPort(process.env.PORT);
+const dataDir = resolve(process.env.NEXUME_DATA_DIR?.trim() || "data");
+const storage = await openStorage({ dataDir });
 const collector = new OpenCodeCollector({
   databasePath: process.env.OPENCODE_DB_PATH,
 });
 const core = createServerCore();
-core.registerCollector({
-  descriptor: {
-    id: "local",
-    name: "Server Local",
-    hostname: getHostname(),
-    version: "0.0.1",
-    agents: ["opencode"],
-  },
-  connectionType: "local",
-  source: collector,
-});
+let localCollectorRegistered = false;
+
+function registerLocalCollector(): void {
+  if (localCollectorRegistered) return;
+  core.registerCollector({
+    descriptor: {
+      id: "local",
+      name: "Server Local",
+      hostname: getHostname(),
+      version: "0.0.1",
+      agents: ["opencode"],
+    },
+    connectionType: "local",
+    source: collector,
+  });
+  localCollectorRegistered = true;
+}
+
+if (storage.initialization.getStatus().initialized) registerLocalCollector();
+
 const collectorSockets = createCollectorSocketServer({
   collectorToken,
   core,
+  isInitialized: () => storage.initialization.getStatus().initialized,
   onError: (error) => console.error(error),
 });
 const collectorSocketHandler = collectorSockets.engine.handler();
 const handler = createRequestHandler({
   accessToken,
   core,
+  initialization: storage.initialization,
+  onInitialized: registerLocalCollector,
   webRoot: resolve(import.meta.dir, "../dist"),
   onError: (error) => console.error(error),
 });
@@ -74,6 +89,7 @@ const server = Bun.serve({
 });
 
 console.log(`Nexume Server: http://${hostname}:${server.port}`);
+console.log(`Data: ${storage.dataDir}`);
 console.log(
   collector.available
     ? `OpenCode: ${collector.databasePath}`
@@ -83,6 +99,7 @@ console.log(
 async function stop(): Promise<void> {
   collectorSockets.close();
   await server.stop();
+  storage.close();
   process.exit(0);
 }
 

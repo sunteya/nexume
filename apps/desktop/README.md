@@ -4,7 +4,7 @@
 
 应用组合 `server-core`、`collector-core` 和 `admin-ui`，在不依赖外部 Server 或独立 Collector 的情况下提供本地采集与 Session 管理能力。
 
-当前项目使用 Electrobun、Vue 3、TypeScript 和 Vite。应用启动时在进程内组合 `server-core` 与 OpenCode Collector，并通过 Electrobun RPC 向共享的 `admin-ui` 提供本机 Session 数据。
+当前项目使用 Electrobun、Vue 3、TypeScript 和 Vite。应用启动时先在系统用户数据目录迁移 Nexume SQLite 数据库，首次打开显示初始化页面；初始化完成后在进程内组合 `server-core` 与 OpenCode Collector，并通过 Electrobun RPC 向共享的 `admin-ui` 提供本机 Session 数据。
 
 ## 环境要求
 

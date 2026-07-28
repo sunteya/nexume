@@ -1,28 +1,38 @@
-import { BrowserView, BrowserWindow, Updater } from "electrobun/bun";
+import { BrowserView, BrowserWindow, Updater, Utils } from "electrobun/bun";
 import { request } from "node:http";
 import { hostname } from "node:os";
 
 import { OpenCodeCollector } from "@nexume/collector-core";
 import { createServerCore } from "@nexume/server-core";
+import { openStorage } from "@nexume/storage";
 
 import type { DesktopRPC } from "../shared/desktop-rpc";
 
 const devServerUrl = "http://localhost:5173";
+const storage = await openStorage({ dataDir: Utils.paths.userData });
 const collector = new OpenCodeCollector({
   databasePath: process.env.OPENCODE_DB_PATH,
 });
 const core = createServerCore();
-core.registerCollector({
-  descriptor: {
-    id: "local",
-    name: "Desktop Local",
-    hostname: hostname(),
-    version: "0.0.1",
-    agents: ["opencode"],
-  },
-  connectionType: "local",
-  source: collector,
-});
+let localCollectorRegistered = false;
+
+function registerLocalCollector(): void {
+  if (localCollectorRegistered) return;
+  core.registerCollector({
+    descriptor: {
+      id: "local",
+      name: "Desktop Local",
+      hostname: hostname(),
+      version: "0.0.1",
+      agents: ["opencode"],
+    },
+    connectionType: "local",
+    source: collector,
+  });
+  localCollectorRegistered = true;
+}
+
+if (storage.initialization.getStatus().initialized) registerLocalCollector();
 
 function isDevServerRunning(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -60,6 +70,12 @@ const rpc = BrowserView.defineRPC<DesktopRPC>({
   handlers: {
     requests: {
       listSessions: (params) => core.listSessions(params),
+      getInitializationStatus: () => storage.initialization.getStatus(),
+      completeInitialization: () => {
+        const status = storage.initialization.complete();
+        registerLocalCollector();
+        return status;
+      },
     },
     messages: {},
   },

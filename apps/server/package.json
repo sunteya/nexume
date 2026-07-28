@@ -17,6 +17,7 @@
     "@nexume/collector-core": "workspace:*",
     "@nexume/contracts": "workspace:*",
     "@nexume/server-core": "workspace:*",
+    "@nexume/storage": "workspace:*",
     "@socket.io/bun-engine": "^0.1.1",
     "element-plus": "^2.14.3",
     "lucide-vue-next": "^1.0.0",

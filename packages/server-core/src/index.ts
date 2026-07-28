@@ -34,11 +34,13 @@ export interface CollectorRegistration {
 export interface ServerCore {
   registerCollector(options: RegisterCollectorOptions): CollectorRegistration;
   listCollectors(): CollectorInfo[];
+  renameCollector(id: string, name: string): boolean;
   listSessions(params: ListSessionsParams): Promise<SessionBatch>;
 }
 
 interface RegistryEntry {
   generation: symbol;
+  instanceId: string;
   info: CollectorInfo;
   source: CollectorSource;
 }
@@ -46,6 +48,7 @@ interface RegistryEntry {
 interface AggregateCursorEntry {
   id: string;
   name: string;
+  instanceId: string;
   position: SessionPosition | null;
 }
 
@@ -135,6 +138,8 @@ function decodeCursor(value: string): AggregateCursor {
         !entry.id ||
         typeof entry.name !== "string" ||
         !entry.name ||
+        typeof entry.instanceId !== "string" ||
+        !entry.instanceId ||
         ids.has(entry.id)
       ) {
         throw new InvalidSessionCursorError();
@@ -188,6 +193,7 @@ export function createServerCore(): ServerCore {
       const generation = Symbol(options.descriptor.id);
       const entry: RegistryEntry = {
         generation,
+        instanceId: crypto.randomUUID(),
         source: options.source,
         info: {
           ...options.descriptor,
@@ -225,6 +231,13 @@ export function createServerCore(): ServerCore {
         );
     },
 
+    renameCollector(id, name) {
+      const entry = registry.get(id);
+      if (!entry) return false;
+      entry.info.name = name;
+      return true;
+    },
+
     async listSessions(params) {
       assertListSessionsParams(params);
       const aggregateCursor = params.cursor
@@ -235,6 +248,7 @@ export function createServerCore(): ServerCore {
             collectors: [...registry.values()].map((entry) => ({
               id: entry.info.id,
               name: entry.info.name,
+              instanceId: entry.instanceId,
               position: null,
             })),
           };
@@ -248,6 +262,9 @@ export function createServerCore(): ServerCore {
             warningFor(cursorEntry, new Error("Collector 已断开连接。")),
           );
           continue;
+        }
+        if (registryEntry.instanceId !== cursorEntry.instanceId) {
+          throw new InvalidSessionCursorError();
         }
 
         pendingQueries.push({
@@ -319,6 +336,7 @@ export function createServerCore(): ServerCore {
         nextEntries.push({
           id: result.cursorEntry.id,
           name: result.registryEntry.info.name,
+          instanceId: result.registryEntry.instanceId,
           position: selected.length
             ? sessionPosition(selected.at(-1)!)
             : result.cursorEntry.position,

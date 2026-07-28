@@ -4,6 +4,7 @@ import {
   CollectorConnection,
   OpenCodeCollector,
 } from "@nexume/collector-core";
+import packageJson from "../package.json";
 
 import {
   CollectorCliUsageError,
@@ -20,18 +21,15 @@ try {
   process.exit(error instanceof CollectorCliUsageError ? 2 : 1);
 }
 
-const machineName = hostname();
 const collector = new OpenCodeCollector({
   databasePath: options.databasePath,
 });
 const connection = new CollectorConnection({
   serverUrl: options.serverUrl,
   token: options.token,
-  descriptor: {
-    id: options.collectorId || machineName,
-    name: options.collectorName || machineName,
-    hostname: machineName,
-    version: "0.0.1",
+  metadata: {
+    hostname: hostname(),
+    version: packageJson.version,
     agents: ["opencode"],
   },
   source: collector,

@@ -6,7 +6,11 @@ import type {
   CollectorSessionQuery,
 } from "@nexume/contracts";
 
-import { CollectorQueryFailedError, createServerCore } from "./index";
+import {
+  CollectorQueryFailedError,
+  InvalidSessionCursorError,
+  createServerCore,
+} from "./index";
 
 function descriptor(id: string): CollectorDescriptor {
   return {
@@ -68,6 +72,39 @@ describe("createServerCore", () => {
     first.unregister();
     expect(core.listCollectors()).toHaveLength(1);
     expect(core.listCollectors()[0]?.name).toBe("Replacement");
+  });
+
+  test("renames a connected collector", () => {
+    const core = createServerCore();
+    core.registerCollector({
+      descriptor: descriptor("local"),
+      connectionType: "local",
+      source: source([]),
+    });
+
+    expect(core.renameCollector("local", "Renamed")).toBe(true);
+    expect(core.listCollectors()[0]?.name).toBe("Renamed");
+    expect(core.renameCollector("missing", "Ignored")).toBe(false);
+  });
+
+  test("rejects a cursor after a collector with the same id is replaced", async () => {
+    const core = createServerCore();
+    const firstRegistration = core.registerCollector({
+      descriptor: descriptor("remote"),
+      connectionType: "remote",
+      source: source(sessions("first", Array.from({ length: 30 }, (_, i) => 100 - i))),
+    });
+    const first = await core.listSessions({ limit: 20 });
+    firstRegistration.unregister();
+    core.registerCollector({
+      descriptor: descriptor("remote"),
+      connectionType: "remote",
+      source: source(sessions("second", Array.from({ length: 30 }, (_, i) => 100 - i))),
+    });
+
+    await expect(
+      core.listSessions({ limit: 20, cursor: first.nextCursor }),
+    ).rejects.toBeInstanceOf(InvalidSessionCursorError);
   });
 
   test("globally merges batches and defers unused source candidates", async () => {

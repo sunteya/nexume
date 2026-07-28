@@ -2,11 +2,9 @@ import { resolve } from "node:path";
 import { hostname as getHostname } from "node:os";
 
 import { OpenCodeCollector } from "@nexume/collector-core";
-import { createServerCore } from "@nexume/server-core";
+import { startServerRuntime } from "@nexume/server-runtime";
 import { openStorage } from "@nexume/storage";
-
-import { createRequestHandler } from "./http";
-import { createCollectorSocketServer } from "./collector-socket";
+import packageJson from "../package.json";
 
 function readPort(value: string | undefined): number {
   const port = Number(value ?? 3000);
@@ -22,11 +20,6 @@ const accessToken = process.env.NEXUME_ACCESS_TOKEN?.trim();
 if (!accessToken) {
   throw new Error("启动 Server 前必须设置 NEXUME_ACCESS_TOKEN。");
 }
-const collectorToken = process.env.NEXUME_COLLECTOR_TOKEN?.trim();
-if (!collectorToken) {
-  throw new Error("启动 Server 前必须设置 NEXUME_COLLECTOR_TOKEN。");
-}
-
 const hostname = process.env.HOST?.trim() || "0.0.0.0";
 const port = readPort(process.env.PORT);
 const dataDir = resolve(process.env.NEXUME_DATA_DIR?.trim() || "data");
@@ -34,61 +27,28 @@ const storage = await openStorage({ dataDir });
 const collector = new OpenCodeCollector({
   databasePath: process.env.OPENCODE_DB_PATH,
 });
-const core = createServerCore();
-let localCollectorRegistered = false;
-
-function registerLocalCollector(): void {
-  if (localCollectorRegistered) return;
-  core.registerCollector({
-    descriptor: {
-      id: "local",
-      name: "Server Local",
-      hostname: getHostname(),
-      version: "0.0.1",
-      agents: ["opencode"],
-    },
-    connectionType: "local",
-    source: collector,
-  });
-  localCollectorRegistered = true;
-}
-
-if (storage.initialization.getStatus().initialized) registerLocalCollector();
-
-const collectorSockets = createCollectorSocketServer({
-  collectorToken,
-  core,
-  isInitialized: () => storage.initialization.getStatus().initialized,
-  onError: (error) => console.error(error),
-});
-const collectorSocketHandler = collectorSockets.engine.handler();
-const handler = createRequestHandler({
+const runtime = startServerRuntime({
   accessToken,
-  core,
-  initialization: storage.initialization,
-  onInitialized: registerLocalCollector,
-  webRoot: resolve(import.meta.dir, "../dist"),
-  onError: (error) => console.error(error),
-});
-const server = Bun.serve({
-  ...collectorSocketHandler,
+  storage,
   hostname,
   port,
-  fetch(request, bunServer) {
-    return new URL(request.url).pathname.startsWith("/socket.io/")
-      ? collectorSocketHandler.fetch(request, bunServer)
-      : handler(request);
+  webRoot: resolve(import.meta.dir, "../dist"),
+  localSource: collector,
+  localMetadata: {
+    hostname: getHostname(),
+    version: packageJson.version,
+    agents: ["opencode"],
   },
-  error(error) {
-    console.error(error);
-    return Response.json(
-      { error: { code: "internal_error", message: "Server 内部错误。" } },
-      { status: 500 },
-    );
-  },
+  defaultLocalCollectorName: "Server Local",
+  getRuntimeInfo: (actualPort) => ({
+    kind: "server",
+    port: actualPort,
+    urls: [`http://${hostname}:${actualPort}`],
+  }),
+  onError: (error) => console.error(error),
 });
 
-console.log(`Nexume Server: http://${hostname}:${server.port}`);
+console.log(`Nexume Server: http://${hostname}:${runtime.server.port}`);
 console.log(`Data: ${storage.dataDir}`);
 console.log(
   collector.available
@@ -97,8 +57,7 @@ console.log(
 );
 
 async function stop(): Promise<void> {
-  collectorSockets.close();
-  await server.stop();
+  await runtime.close();
   storage.close();
   process.exit(0);
 }

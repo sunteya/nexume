@@ -1,94 +1,79 @@
-import { BrowserView, BrowserWindow, Updater, Utils } from "electrobun/bun";
-import { request } from "node:http";
-import { hostname } from "node:os";
+import { randomBytes } from "node:crypto";
+import { hostname, networkInterfaces } from "node:os";
+import { resolve } from "node:path";
+
+import Electrobun, { BrowserWindow, Utils } from "electrobun/bun";
 
 import { OpenCodeCollector } from "@nexume/collector-core";
-import { createServerCore } from "@nexume/server-core";
+import { startServerRuntime } from "@nexume/server-runtime";
 import { openStorage } from "@nexume/storage";
+import packageJson from "../../package.json";
 
-import type { DesktopRPC } from "../shared/desktop-rpc";
-
-const devServerUrl = "http://localhost:5173";
+const port = 0;
 const storage = await openStorage({ dataDir: Utils.paths.userData });
 const collector = new OpenCodeCollector({
   databasePath: process.env.OPENCODE_DB_PATH,
 });
-const core = createServerCore();
-let localCollectorRegistered = false;
+const accessToken = `nxa_${randomBytes(32).toString("base64url")}`;
 
-function registerLocalCollector(): void {
-  if (localCollectorRegistered) return;
-  core.registerCollector({
-    descriptor: {
-      id: "local",
-      name: "Desktop Local",
-      hostname: hostname(),
-      version: "0.0.1",
-      agents: ["opencode"],
-    },
-    connectionType: "local",
-    source: collector,
-  });
-  localCollectorRegistered = true;
+if (
+  storage.initialization.getStatus().initialized &&
+  storage.collectors.get("local")?.name === "Server Local"
+) {
+  storage.collectors.updateName("local", "Desktop Local");
 }
 
-if (storage.initialization.getStatus().initialized) registerLocalCollector();
-
-function isDevServerRunning(): Promise<boolean> {
-  return new Promise((resolve) => {
-    const probe = request(devServerUrl, { method: "HEAD" }, (response) => {
-      response.resume();
-      resolve(
-        response.statusCode !== undefined &&
-          response.statusCode >= 200 &&
-          response.statusCode < 400,
-      );
-    });
-
-    probe.setTimeout(500, () => {
-      probe.destroy();
-      resolve(false);
-    });
-    probe.on("error", () => resolve(false));
-    probe.end();
-  });
-}
-
-async function getMainViewUrl(): Promise<string> {
-  if (
-    (await Updater.localInfo.channel()) === "dev" &&
-    (await isDevServerRunning())
-  ) {
-    return devServerUrl;
+function desktopUrls(actualPort: number): string[] {
+  const addresses = new Set(["127.0.0.1"]);
+  for (const entries of Object.values(networkInterfaces())) {
+    for (const entry of entries ?? []) {
+      if (entry.family === "IPv4" && !entry.internal) addresses.add(entry.address);
+    }
   }
-
-  return "views://mainview/index.html";
+  return [...addresses].map((address) => `http://${address}:${actualPort}`);
 }
 
-const rpc = BrowserView.defineRPC<DesktopRPC>({
-  maxRequestTime: 10_000,
-  handlers: {
-    requests: {
-      listSessions: (params) => core.listSessions(params),
-      getInitializationStatus: () => storage.initialization.getStatus(),
-      completeInitialization: () => {
-        const status = storage.initialization.complete();
-        registerLocalCollector();
-        return status;
-      },
-    },
-    messages: {},
+const runtime = startServerRuntime({
+  accessToken,
+  storage,
+  hostname: "0.0.0.0",
+  port,
+  webRoot: resolve(import.meta.dir, "../web"),
+  localSource: collector,
+  localMetadata: {
+    hostname: hostname(),
+    version: packageJson.version,
+    agents: ["opencode"],
   },
+  defaultLocalCollectorName: "Desktop Local",
+  getRuntimeInfo: (actualPort) => ({
+    kind: "desktop",
+    port: actualPort,
+    urls: desktopUrls(actualPort),
+  }),
+  onError: (error) => console.error(error),
+});
+
+let allowingQuit = false;
+Electrobun.events.on("before-quit", (event: { response: { allow: boolean } }) => {
+  if (allowingQuit) return;
+  event.response = { allow: false };
+  void runtime.close().finally(() => {
+    storage.close();
+    allowingQuit = true;
+    Utils.quit();
+  });
 });
 
 new BrowserWindow({
   title: "Nexume",
-  url: await getMainViewUrl(),
-  rpc,
+  url: runtime.createBootstrapUrl(),
   frame: {
-    width: 880,
-    height: 580,
+    width: 980,
+    height: 680,
     x: 160,
     y: 120,
   },
 });
+
+console.log(`Nexume Desktop: http://0.0.0.0:${runtime.server.port ?? port}`);

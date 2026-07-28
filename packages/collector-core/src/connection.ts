@@ -2,9 +2,10 @@ import { io, type Socket } from "socket.io-client";
 
 import {
   assertCollectorSessionQuery,
-  type CollectorDescriptor,
   type CollectorSessionBatch,
   type CollectorSessionQuery,
+  type CollectorRuntimeMetadata,
+  type CollectorSocketAuth,
   type CollectorToServerEvents,
   type ServerToCollectorEvents,
 } from "@nexume/contracts";
@@ -24,7 +25,7 @@ export type CollectorConnectionState =
 export interface CollectorConnectionOptions {
   serverUrl: string;
   token: string;
-  descriptor: CollectorDescriptor;
+  metadata: CollectorRuntimeMetadata;
   source: CollectorDataSource;
   onStateChange?: (state: CollectorConnectionState, detail?: string) => void;
 }
@@ -37,28 +38,30 @@ function getErrorMessage(error: unknown): string {
 
 export class CollectorConnection {
   readonly socket: CollectorSocket;
+  private heartbeat?: ReturnType<typeof setInterval>;
 
   constructor(private readonly options: CollectorConnectionOptions) {
     const serverUrl = options.serverUrl.replace(/\/$/, "");
-    this.socket = io(`${serverUrl}/collectors`, {
+    const auth: CollectorSocketAuth = {
+      token: options.token,
+      metadata: options.metadata,
+    };
+    this.socket = io(serverUrl, {
       path: "/socket.io",
       autoConnect: false,
       reconnection: true,
       reconnectionDelay: 1_000,
       reconnectionDelayMax: 30_000,
-      auth: {
-        token: options.token,
-        collector: options.descriptor,
-      },
+      auth,
     });
 
     this.socket.on("connect", () => {
       options.onStateChange?.("connected");
-      this.socket.emit("collector:status", {
-        available: options.source.available,
-      });
+      this.sendStatus();
+      this.heartbeat = setInterval(() => this.sendStatus(), 30_000);
     });
     this.socket.on("disconnect", (reason) => {
+      this.clearHeartbeat();
       options.onStateChange?.("disconnected", reason);
     });
     this.socket.on("connect_error", (error) => {
@@ -90,6 +93,18 @@ export class CollectorConnection {
   }
 
   disconnect(): void {
+    this.clearHeartbeat();
     this.socket.disconnect();
+  }
+
+  private sendStatus(): void {
+    this.socket.emit("collector:status", {
+      available: this.options.source.available,
+    });
+  }
+
+  private clearHeartbeat(): void {
+    if (this.heartbeat) clearInterval(this.heartbeat);
+    this.heartbeat = undefined;
   }
 }

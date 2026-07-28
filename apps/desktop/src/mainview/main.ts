@@ -4,7 +4,7 @@ import { createApp } from "vue";
 import "@nexume/admin-ui/style.css";
 import "element-plus/theme-chalk/dark/css-vars.css";
 
-import DesktopApp from "./DesktopApp.vue";
+import { HttpAdminApp } from "@nexume/admin-ui";
 
 const colorScheme = window.matchMedia("(prefers-color-scheme: dark)");
 
@@ -15,4 +15,4 @@ function syncColorScheme(event: MediaQueryList | MediaQueryListEvent): void {
 syncColorScheme(colorScheme);
 colorScheme.addEventListener("change", syncColorScheme);
 
-createApp(DesktopApp).use(ElLoading).mount("#app");
+createApp(HttpAdminApp, { sourceLabel: "Desktop" }).use(ElLoading).mount("#app");

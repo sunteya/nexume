@@ -5,6 +5,7 @@
 - `contracts`：公共数据模型与通信协议。
 - `collector-core`：Agent 数据采集能力。
 - `server-core`：数据管理与上下文服务能力。
+- `server-runtime`：可复用的 HTTP、Web、Socket.IO 和 Collector 管理运行时。
 - `storage`：SQLite 持久化、全局设置与应用迁移能力。
 - `admin-ui`：完整管理界面。
 

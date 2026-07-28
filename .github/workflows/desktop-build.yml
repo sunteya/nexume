@@ -8,10 +8,26 @@ on:
     paths:
       - ".github/workflows/desktop-build.yml"
       - "apps/desktop/**"
+      - "packages/admin-ui/**"
+      - "packages/collector-core/**"
+      - "packages/contracts/**"
+      - "packages/server-core/**"
+      - "packages/server-runtime/**"
+      - "packages/storage/**"
+      - "bun.lock"
+      - "package.json"
   pull_request:
     paths:
       - ".github/workflows/desktop-build.yml"
       - "apps/desktop/**"
+      - "packages/admin-ui/**"
+      - "packages/collector-core/**"
+      - "packages/contracts/**"
+      - "packages/server-core/**"
+      - "packages/server-runtime/**"
+      - "packages/storage/**"
+      - "bun.lock"
+      - "package.json"
 
 permissions:
   contents: read

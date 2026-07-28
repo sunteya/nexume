@@ -1,16 +1,12 @@
 export interface CollectorCliOptions {
   serverUrl: string;
   token: string;
-  collectorId?: string;
-  collectorName?: string;
   databasePath?: string;
 }
 
 const optionNames = new Set([
   "--server-url",
   "--token",
-  "--id",
-  "--name",
   "--db-path",
 ]);
 
@@ -18,8 +14,6 @@ const usage = `Usage:
   nexume-collector --server-url <url> --token <token> [options]
 
 Options:
-  --id <id>             Collector ID. Defaults to the local hostname.
-  --name <name>         Collector name. Defaults to the local hostname.
   --db-path <path>      Path to the OpenCode SQLite database.
   --help                Show this help message.`;
 
@@ -81,8 +75,6 @@ export function parseCollectorCliOptions(args: string[]): CollectorCliOptions {
   return {
     serverUrl,
     token,
-    collectorId: values.get("--id"),
-    collectorName: values.get("--name"),
     databasePath: values.get("--db-path"),
   };
 }

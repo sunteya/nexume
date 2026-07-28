@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import {
   ElButton,
+  ElCheckbox,
   ElConfigProvider,
   ElInput,
 } from "element-plus";
 import zhCn from "element-plus/es/locale/lang/zh-cn";
 import { ArrowRight, KeyRound, LoaderCircle, RotateCw } from "lucide-vue-next";
-import { onMounted, ref } from "vue";
+import { onMounted, ref, watch } from "vue";
 
 import type { InitializationClient } from "./client";
 
@@ -14,9 +15,13 @@ const props = withDefaults(
   defineProps<{
     client: InitializationClient;
     requiresAccessToken?: boolean;
+    allowLocalCollectorChoice?: boolean;
+    initialAccessToken?: string;
   }>(),
   {
     requiresAccessToken: false,
+    allowLocalCollectorChoice: false,
+    initialAccessToken: "",
   },
 );
 
@@ -28,7 +33,15 @@ const checking = ref(true);
 const statusAvailable = ref(false);
 const submitting = ref(false);
 const errorMessage = ref("");
-const accessToken = ref("");
+const accessToken = ref(props.initialAccessToken);
+const initializeLocalCollector = ref(true);
+
+watch(
+  () => props.initialAccessToken,
+  (token) => {
+    accessToken.value = token;
+  },
+);
 
 function errorText(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
@@ -64,7 +77,10 @@ async function complete(): Promise<void> {
   errorMessage.value = "";
 
   try {
-    await props.client.completeInitialization(token || undefined);
+    await props.client.completeInitialization(
+      { initializeLocalCollector: initializeLocalCollector.value },
+      token || undefined,
+    );
     emit("initialized", token);
   } catch (error) {
     errorMessage.value = errorText(error, "初始化 Nexume 失败。");
@@ -106,7 +122,7 @@ onMounted(() => void checkStatus());
 
           <form class="initialization-form" @submit.prevent="complete">
             <el-input
-              v-if="requiresAccessToken"
+              v-if="requiresAccessToken && !initialAccessToken"
               v-model="accessToken"
               type="password"
               size="large"
@@ -119,6 +135,14 @@ onMounted(() => void checkStatus());
                 <key-round :size="17" :stroke-width="1.8" />
               </template>
             </el-input>
+
+            <el-checkbox
+              v-if="allowLocalCollectorChoice"
+              v-model="initializeLocalCollector"
+              class="initialization-checkbox"
+            >
+              初始化本机 Collector
+            </el-checkbox>
 
             <span v-if="errorMessage" class="initialization-error" role="alert">
               {{ errorMessage }}

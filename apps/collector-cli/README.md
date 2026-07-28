@@ -10,4 +10,4 @@ bun run start -- \
   --token collector-token
 ```
 
-可通过 `--id`、`--name` 和 `--db-path` 指定 Collector ID、名称与 OpenCode 数据库路径。ID 和名称默认使用本机 hostname，同一 Server 上必须保持唯一。
+Collector 的管理端 ID 和名称由 Server token 绑定。CLI 自动上报本机 hostname、Collector 版本和支持的 agents；可选 `--db-path` 指定 OpenCode 数据库路径。

@@ -53,18 +53,68 @@ export interface SessionBatch {
   warnings: CollectorQueryWarning[];
 }
 
-export interface CollectorDescriptor {
-  id: string;
-  name: string;
+export interface CollectorRuntimeMetadata {
   hostname: string;
   version: string;
   agents: AgentType[];
+}
+
+export interface CollectorDescriptor extends CollectorRuntimeMetadata {
+  id: string;
+  name: string;
+}
+
+export interface CollectorSocketAuth {
+  token: string;
+  metadata: CollectorRuntimeMetadata;
 }
 
 export interface CollectorInfo extends CollectorDescriptor {
   connectionType: CollectorConnectionType;
   connectedAt: number;
   lastSeenAt: number;
+}
+
+export interface ManagedCollectorInfo {
+  id: string;
+  name: string;
+  connectionType: CollectorConnectionType;
+  online: boolean;
+  hostname?: string;
+  version?: string;
+  agents: AgentType[];
+  connectedAt?: number;
+  lastSeenAt?: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface CompleteInitializationInput {
+  initializeLocalCollector: boolean;
+}
+
+export interface CreateCollectorInput {
+  name: string;
+  connectionType: CollectorConnectionType;
+}
+
+export interface RenameCollectorInput {
+  name: string;
+}
+
+export interface CreateCollectorResult {
+  collector: ManagedCollectorInfo;
+  token?: string;
+}
+
+export interface CollectorTokenResult {
+  token: string;
+}
+
+export interface RuntimeInfo {
+  kind: "server" | "desktop";
+  port: number;
+  urls: string[];
 }
 
 export interface CollectorStatus {
@@ -166,5 +216,78 @@ export function assertCollectorDescriptor(
     descriptor.agents.some((agent) => agent !== "opencode")
   ) {
     throw new Error("Collector Agent 列表无效。");
+  }
+}
+
+export function assertCollectorRuntimeMetadata(
+  value: unknown,
+): asserts value is CollectorRuntimeMetadata {
+  if (!value || typeof value !== "object") {
+    throw new Error("Collector runtime metadata 无效。");
+  }
+
+  const metadata = value as Partial<CollectorRuntimeMetadata>;
+  if (
+    Object.keys(metadata).some(
+      (key) => !["hostname", "version", "agents"].includes(key),
+    )
+  ) {
+    throw new Error("Collector runtime metadata 字段无效。");
+  }
+
+  const strings = [metadata.hostname, metadata.version];
+  if (
+    strings.some(
+      (item) => typeof item !== "string" || !item.trim() || item.length > 128,
+    )
+  ) {
+    throw new Error("Collector runtime metadata 不完整。");
+  }
+
+  if (
+    !Array.isArray(metadata.agents) ||
+    metadata.agents.length === 0 ||
+    metadata.agents.some((agent) => agent !== "opencode")
+  ) {
+    throw new Error("Collector Agent 列表无效。");
+  }
+}
+
+export function assertCollectorSocketAuth(
+  value: unknown,
+): asserts value is CollectorSocketAuth {
+  if (!value || typeof value !== "object") {
+    throw new Error("Collector Socket auth 无效。");
+  }
+
+  const auth = value as Partial<CollectorSocketAuth>;
+  if (Object.keys(auth).some((key) => !["token", "metadata"].includes(key))) {
+    throw new Error("Collector Socket auth 字段无效。");
+  }
+
+  if (typeof auth.token !== "string" || !auth.token.trim()) {
+    throw new Error("Collector Socket token 无效。");
+  }
+
+  assertCollectorRuntimeMetadata(auth.metadata);
+}
+
+export function assertCollectorName(value: unknown): asserts value is string {
+  if (typeof value !== "string" || !value.trim() || value.trim().length > 128) {
+    throw new Error("Collector 名称必须是 1 到 128 个字符。");
+  }
+}
+
+export function assertCreateCollectorInput(
+  value: unknown,
+): asserts value is CreateCollectorInput {
+  if (!value || typeof value !== "object") {
+    throw new Error("Collector 创建参数无效。");
+  }
+
+  const input = value as Partial<CreateCollectorInput>;
+  assertCollectorName(input.name);
+  if (input.connectionType !== "local" && input.connectionType !== "remote") {
+    throw new Error("Collector 类型无效。");
   }
 }

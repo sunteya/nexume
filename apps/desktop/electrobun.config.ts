@@ -8,8 +8,8 @@ export default {
   },
   build: {
     copy: {
-      "dist/index.html": "views/mainview/index.html",
-      "dist/assets": "views/mainview/assets",
+      "dist/index.html": "web/index.html",
+      "dist/assets": "web/assets",
     },
     watchIgnore: ["dist/**"],
     mac: {

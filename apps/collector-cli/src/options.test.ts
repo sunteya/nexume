@@ -13,18 +13,12 @@ describe("parseCollectorCliOptions", () => {
         "https://nexume.example.com",
         "--token",
         "collector-token",
-        "--id",
-        "build-agent",
-        "--name",
-        "Build Agent",
         "--db-path",
         "/data/opencode.db",
       ]),
     ).toEqual({
       serverUrl: "https://nexume.example.com",
       token: "collector-token",
-      collectorId: "build-agent",
-      collectorName: "Build Agent",
       databasePath: "/data/opencode.db",
     });
   });
@@ -43,5 +37,28 @@ describe("parseCollectorCliOptions", () => {
         "--unknown",
       ]),
     ).toThrow("Unknown option");
+  });
+
+  test("rejects removed identity options", () => {
+    expect(() =>
+      parseCollectorCliOptions([
+        "--server-url",
+        "http://localhost:3000",
+        "--token",
+        "token",
+        "--id",
+        "collector-1",
+      ]),
+    ).toThrow("Unknown option: --id");
+    expect(() =>
+      parseCollectorCliOptions([
+        "--server-url",
+        "http://localhost:3000",
+        "--token",
+        "token",
+        "--name",
+        "Collector 1",
+      ]),
+    ).toThrow("Unknown option: --name");
   });
 });

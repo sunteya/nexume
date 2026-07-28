@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 
 import type { InitializationStatus } from "@nexume/contracts";
 
+import { CollectorStore } from "./collector";
 import { SettingsStore } from "./settings";
 
 export class AlreadyInitializedError extends Error {
@@ -11,11 +12,20 @@ export class AlreadyInitializedError extends Error {
   }
 }
 
+export interface CompleteInitializationOptions {
+  localCollector?: {
+    id: string;
+    name: string;
+  };
+}
+
 export class InitializationService {
   private readonly settings: SettingsStore;
+  private readonly collectors: CollectorStore;
 
   constructor(private readonly db: Database) {
     this.settings = new SettingsStore(db);
+    this.collectors = new CollectorStore(db);
   }
 
   getStatus(): InitializationStatus {
@@ -25,7 +35,7 @@ export class InitializationService {
       : { initialized: true, initializedAt };
   }
 
-  complete(): InitializationStatus {
+  complete(options: CompleteInitializationOptions = {}): InitializationStatus {
     const initializedAt = Date.now();
 
     this.db.transaction(() => {
@@ -33,6 +43,13 @@ export class InitializationService {
         throw new AlreadyInitializedError();
       }
       this.settings.set("app.initialized_at", initializedAt);
+      if (options.localCollector && !this.collectors.get(options.localCollector.id)) {
+        this.collectors.create({
+          id: options.localCollector.id,
+          name: options.localCollector.name,
+          connectionType: "local",
+        });
+      }
     })();
 
     return { initialized: true, initializedAt };

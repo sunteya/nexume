@@ -24,7 +24,7 @@
         "@nexume/admin-ui": "workspace:*",
         "@nexume/collector-core": "workspace:*",
         "@nexume/contracts": "workspace:*",
-        "@nexume/server-core": "workspace:*",
+        "@nexume/server-runtime": "workspace:*",
         "@nexume/storage": "workspace:*",
         "electrobun": "1.18.1",
         "element-plus": "^2.14.3",
@@ -35,7 +35,6 @@
         "@types/bun": "latest",
         "@types/three": "^0.185.1",
         "@vitejs/plugin-vue": "^5.2.1",
-        "concurrently": "^9.1.0",
         "typescript": "^5.7.2",
         "unplugin-element-plus": "^0.11.2",
         "vite": "^6.0.3",
@@ -49,12 +48,10 @@
         "@nexume/admin-ui": "workspace:*",
         "@nexume/collector-core": "workspace:*",
         "@nexume/contracts": "workspace:*",
-        "@nexume/server-core": "workspace:*",
+        "@nexume/server-runtime": "workspace:*",
         "@nexume/storage": "workspace:*",
-        "@socket.io/bun-engine": "^0.1.1",
         "element-plus": "^2.14.3",
         "lucide-vue-next": "^1.0.0",
-        "socket.io": "^4.8.3",
         "vue": "^3.5.13",
       },
       "devDependencies": {
@@ -108,6 +105,22 @@
         "@nexume/contracts": "workspace:*",
       },
       "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5.7.2",
+      },
+    },
+    "packages/server-runtime": {
+      "name": "@nexume/server-runtime",
+      "version": "0.0.1",
+      "dependencies": {
+        "@nexume/contracts": "workspace:*",
+        "@nexume/server-core": "workspace:*",
+        "@nexume/storage": "workspace:*",
+        "@socket.io/bun-engine": "^0.1.1",
+        "socket.io": "^4.8.3",
+      },
+      "devDependencies": {
+        "@nexume/collector-core": "workspace:*",
         "@types/bun": "latest",
         "typescript": "^5.7.2",
       },
@@ -225,6 +238,8 @@
     "@nexume/server": ["@nexume/server@workspace:apps/server"],
 
     "@nexume/server-core": ["@nexume/server-core@workspace:packages/server-core"],
+
+    "@nexume/server-runtime": ["@nexume/server-runtime@workspace:packages/server-runtime"],
 
     "@nexume/storage": ["@nexume/storage@workspace:packages/storage"],
 

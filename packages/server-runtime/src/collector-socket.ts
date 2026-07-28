@@ -1,10 +1,8 @@
-import { timingSafeEqual } from "node:crypto";
-
 import { Server as BunEngine } from "@socket.io/bun-engine";
 import {
-  assertCollectorDescriptor,
-  type CollectorDescriptor,
+  assertCollectorSocketAuth,
   type CollectorQueryResponse,
+  type CollectorRuntimeMetadata,
   type CollectorSessionBatch,
   type CollectorSocketData,
   type CollectorToServerEvents,
@@ -18,8 +16,11 @@ import {
 import { Server as SocketIOServer, type Socket } from "socket.io";
 
 export interface CollectorSocketServerOptions {
-  collectorToken: string;
   core: ServerCore;
+  authenticate(token: string): { id: string; name: string } | undefined;
+  getCollector(id: string): { id: string; name: string } | undefined;
+  onConnected?: (id: string, metadata: CollectorRuntimeMetadata) => void;
+  onTouched?: (id: string) => void;
   isInitialized?: () => boolean;
   queryTimeout?: number;
   onError?: (error: unknown) => void;
@@ -31,18 +32,6 @@ type CollectorServerSocket = Socket<
   InterServerEvents,
   CollectorSocketData
 >;
-
-function tokensEqual(actual: unknown, expected: string): boolean {
-  if (typeof actual !== "string") return false;
-
-  const encoder = new TextEncoder();
-  const actualBytes = encoder.encode(actual);
-  const expectedBytes = encoder.encode(expected);
-  return (
-    actualBytes.length === expectedBytes.length &&
-    timingSafeEqual(actualBytes, expectedBytes)
-  );
-}
 
 function getQueryResult(
   response: CollectorQueryResponse,
@@ -85,32 +74,39 @@ export function createCollectorSocketServer(
     InterServerEvents,
     CollectorSocketData
   >();
-  const namespace = io.of("/collectors");
   const sockets = new Map<string, CollectorServerSocket>();
 
   io.bind(engine);
 
-  namespace.use((socket, next) => {
+  io.use((socket, next) => {
     try {
       if (options.isInitialized && !options.isInitialized()) {
         throw new Error("请先完成 Nexume 初始化。");
       }
 
-      if (!tokensEqual(socket.handshake.auth.token, options.collectorToken)) {
+      assertCollectorSocketAuth(socket.handshake.auth);
+      const collector = options.authenticate(socket.handshake.auth.token);
+      if (!collector) {
         throw new Error("Collector 连接凭证无效。");
       }
 
-      assertCollectorDescriptor(socket.handshake.auth.collector);
-      socket.data.collectorId = socket.handshake.auth.collector.id;
+      socket.data.collectorId = collector.id;
       next();
     } catch (error) {
       next(error instanceof Error ? error : new Error(String(error)));
     }
   });
 
-  namespace.on("connection", (socket) => {
-    const descriptor = socket.handshake.auth.collector as CollectorDescriptor;
-    const existing = sockets.get(descriptor.id);
+  io.on("connection", (socket) => {
+    const metadata = socket.handshake.auth.metadata as CollectorRuntimeMetadata;
+    const collector = options.getCollector(socket.data.collectorId);
+    if (!collector) {
+      socket.disconnect(true);
+      return;
+    }
+
+    const descriptor = { ...collector, ...metadata };
+    const existing = sockets.get(collector.id);
     if (existing && existing.id !== socket.id) existing.disconnect(true);
 
     try {
@@ -122,16 +118,22 @@ export function createCollectorSocketServer(
             const response = await socket
               .timeout(options.queryTimeout ?? 10_000)
               .emitWithAck("sessions:list", query);
-            return getQueryResult(response, query.limit);
+            const result = getQueryResult(response, query.limit);
+            options.onTouched?.(collector.id);
+            return result;
           },
         },
       });
-      sockets.set(descriptor.id, socket);
+      sockets.set(collector.id, socket);
+      options.onConnected?.(collector.id, metadata);
 
-      socket.on("collector:status", () => registration.touch());
+      socket.on("collector:status", () => {
+        registration.touch();
+        options.onTouched?.(collector.id);
+      });
       socket.on("disconnect", () => {
-        if (sockets.get(descriptor.id)?.id === socket.id) {
-          sockets.delete(descriptor.id);
+        if (sockets.get(collector.id)?.id === socket.id) {
+          sockets.delete(collector.id);
         }
         registration.unregister();
       });
@@ -146,9 +148,16 @@ export function createCollectorSocketServer(
   return {
     engine,
     io,
-    close() {
-      io.close();
-      engine.close();
+    disconnectCollector(id: string) {
+      sockets.get(id)?.disconnect(true);
+    },
+    close(): Promise<void> {
+      return new Promise((resolve) => {
+        io.close(() => {
+          engine.close();
+          resolve();
+        });
+      });
     },
   };
 }

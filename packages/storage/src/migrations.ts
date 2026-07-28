@@ -4,6 +4,7 @@ import type { Database } from "bun:sqlite";
 import type { RunnableMigration } from "umzug";
 
 import initialSql from "./migrations/0001_initial.sql" with { type: "text" };
+import collectorsSql from "./migrations/0002_collectors.sql" with { type: "text" };
 
 export interface MigrationContext {
   db: Database;
@@ -31,4 +32,5 @@ function sqlMigration(
 
 export const migrations: RunnableMigration<MigrationContext>[] = [
   sqlMigration("0001_initial", initialSql),
+  sqlMigration("0002_collectors", collectorsSql),
 ];

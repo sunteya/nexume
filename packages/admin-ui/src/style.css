@@ -32,6 +32,62 @@ select {
   font: inherit;
 }
 
+.auth-shell {
+  display: grid;
+  width: 100%;
+  min-height: 100%;
+  place-items: center;
+  padding: 24px;
+  border-left: 6px solid #14705a;
+  background: #f7f8f8;
+}
+
+.auth-panel {
+  width: min(100%, 360px);
+}
+
+.auth-brand {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid #b9ccc6;
+  border-radius: 6px;
+  color: #146651;
+  background: #f5faf8;
+  font-size: 20px;
+  font-weight: 720;
+}
+
+.auth-panel h1 {
+  margin: 22px 0 0;
+  color: #1d2422;
+  font-size: 26px;
+  font-weight: 680;
+  letter-spacing: 0;
+}
+
+.auth-panel p {
+  margin: 8px 0 24px;
+  color: #65716d;
+  font-size: 14px;
+}
+
+.auth-form {
+  display: grid;
+  gap: 12px;
+}
+
+.auth-form .el-button {
+  width: 100%;
+  border-radius: 6px;
+}
+
+.auth-error {
+  color: #c0362c;
+  font-size: 12px;
+}
+
 .initialization-shell {
   display: grid;
   width: 100%;
@@ -81,6 +137,10 @@ select {
 .initialization-form .el-button {
   width: 100%;
   border-radius: 6px;
+}
+
+.initialization-checkbox {
+  margin: 2px 0 0;
 }
 
 .initialization-error {
@@ -179,6 +239,22 @@ select {
   margin-left: auto;
 }
 
+.server-view-nav {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+}
+
+.server-nav-button {
+  gap: 6px;
+}
+
+.server-view-nav ~ .refresh-button {
+  margin-left: 0;
+}
+
 .error-alert,
 .warning-alert {
   flex: 0 0 auto;
@@ -255,15 +331,198 @@ select {
   font-size: 12px;
 }
 
+.collector-table-region {
+  padding-top: 16px;
+}
+
+.desktop-runtime-bar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 20px;
+  padding: 10px 20px;
+  border-bottom: 1px solid #dfe4e2;
+  background: #eef3f1;
+  color: #53615c;
+  font-size: 12px;
+}
+
+.desktop-runtime-status,
+.desktop-runtime-values,
+.runtime-value {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.desktop-runtime-status {
+  flex: 0 0 auto;
+  gap: 7px;
+}
+
+.desktop-runtime-status strong {
+  color: #26312d;
+}
+
+.runtime-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #17845f;
+}
+
+.desktop-runtime-values {
+  flex: 1 1 auto;
+  justify-content: flex-end;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.runtime-value {
+  gap: 4px;
+  overflow: hidden;
+}
+
+.runtime-value code {
+  overflow: hidden;
+  color: #35423d;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtime-value .el-button {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  padding: 0;
+}
+
+.collector-table-region .el-table .el-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.collector-name {
+  color: #1f2926;
+  font-weight: 570;
+}
+
+.collector-type {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #53615c;
+}
+
+.collector-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.collector-row-actions .el-button {
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+}
+
+.danger-action {
+  color: #c0362c;
+}
+
+.collector-type-choice {
+  display: flex;
+  width: 100%;
+}
+
+.collector-type-choice .el-radio-button {
+  flex: 1 1 0;
+}
+
+.collector-type-choice .el-radio-button__inner {
+  width: 100%;
+}
+
+.token-dialog-note {
+  margin: 0 0 12px;
+  color: #65716d;
+  font-size: 13px;
+}
+
+.token-value-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.token-value-input {
+  min-width: 0;
+}
+
+.token-value-input input {
+  color: #2b3431;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+
 @media (max-width: 620px) {
   .app-header {
     min-height: 82px;
+    gap: 8px;
     padding: 14px 16px;
+  }
+
+  .app-header .source-line {
+    display: none;
+  }
+
+  .server-nav-button {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+  }
+
+  .server-nav-button .nav-label {
+    display: none;
+  }
+
+  .collector-create-button {
+    width: 34px;
+    height: 32px;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .collector-create-button .el-icon {
+    margin: 0;
   }
 
   .table-region {
     padding-right: 12px;
     padding-left: 12px;
+  }
+
+  .collector-table-region .el-table {
+    min-width: 980px;
+  }
+
+  .desktop-runtime-bar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .desktop-runtime-values {
+    width: 100%;
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .load-more-bar {
@@ -276,9 +535,34 @@ select {
   }
 }
 
+@media (max-width: 480px) {
+  .app-header:has(.server-view-nav) .page-heading {
+    display: none;
+  }
+}
+
 html.dark {
   color: #dfe7e4;
   background: #171c1b;
+}
+
+html.dark .auth-shell {
+  border-left-color: #45a88d;
+  background: #181e1c;
+}
+
+html.dark .auth-brand {
+  border-color: #40554e;
+  color: #73c7af;
+  background: #24312d;
+}
+
+html.dark .auth-panel h1 {
+  color: #edf3f1;
+}
+
+html.dark .auth-panel p {
+  color: #9eaaa6;
 }
 
 html.dark .initialization-shell {
@@ -300,6 +584,19 @@ html.dark .initialization-panel p {
   color: #9eaaa6;
 }
 
+html.dark .collector-name {
+  color: #edf3f1;
+}
+
+html.dark .collector-type,
+html.dark .token-dialog-note {
+  color: #9eaaa6;
+}
+
+html.dark .token-value-input input {
+  color: #d8e0dd;
+}
+
 html.dark .app-shell,
 html.dark .table-region,
 html.dark .load-more-bar {
@@ -313,6 +610,10 @@ html.dark .app-shell {
 html.dark .app-header {
   border-bottom-color: #323b38;
   background: #202725;
+}
+
+html.dark .server-nav-button:not(.is-disabled) {
+  color: #c3cfca;
 }
 
 html.dark .brand-mark {

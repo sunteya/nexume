@@ -8,7 +8,6 @@
     "dev:api": "bun --watch src/index.ts",
     "dev:web": "vite --host 0.0.0.0",
     "start": "bun src/index.ts",
-    "test": "bun test",
     "typecheck": "vue-tsc -p tsconfig.json",
     "build": "vite build"
   },
@@ -16,12 +15,10 @@
     "@nexume/admin-ui": "workspace:*",
     "@nexume/collector-core": "workspace:*",
     "@nexume/contracts": "workspace:*",
-    "@nexume/server-core": "workspace:*",
+    "@nexume/server-runtime": "workspace:*",
     "@nexume/storage": "workspace:*",
-    "@socket.io/bun-engine": "^0.1.1",
     "element-plus": "^2.14.3",
     "lucide-vue-next": "^1.0.0",
-    "socket.io": "^4.8.3",
     "vue": "^3.5.13"
   },
   "devDependencies": {

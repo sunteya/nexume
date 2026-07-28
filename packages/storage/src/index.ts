@@ -5,12 +5,23 @@ import { Database } from "bun:sqlite";
 import { Umzug, type RunnableMigration } from "umzug";
 
 import { InitializationService } from "./initialization";
+import { CollectorStore } from "./collector";
 import { SqliteMigrationStorage } from "./migration-storage";
 import { migrations, type MigrationContext } from "./migrations";
 
-export { AlreadyInitializedError, InitializationService } from "./initialization";
+export {
+  AlreadyInitializedError,
+  InitializationService,
+  type CompleteInitializationOptions,
+} from "./initialization";
 export { defineMigration, type MigrationContext } from "./migrations";
 export { SettingsStore, type SettingKey, type SettingValueMap } from "./settings";
+export {
+  CollectorStore,
+  type CollectorRecord,
+  type CollectorRuntime,
+  type CreateCollectorInput,
+} from "./collector";
 
 export interface OpenStorageOptions {
   dataDir: string;
@@ -22,6 +33,7 @@ export interface AppStorage {
   databasePath: string;
   db: Database;
   initialization: InitializationService;
+  collectors: CollectorStore;
   close(): void;
 }
 
@@ -79,12 +91,14 @@ export async function openStorage(
     const context: MigrationContext = { db, dataDir, cacheDir };
     await runMigrations(context);
 
+    const collectors = new CollectorStore(db);
     return {
       dataDir,
       cacheDir,
       databasePath,
       db,
       initialization: new InitializationService(db),
+      collectors,
       close: () => db.close(),
     };
   } catch (error) {

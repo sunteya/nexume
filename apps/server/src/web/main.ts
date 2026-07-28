@@ -3,7 +3,6 @@ import { createApp } from "vue";
 
 import "@nexume/admin-ui/style.css";
 import "element-plus/theme-chalk/dark/css-vars.css";
-import "./web.css";
 import WebApp from "./WebApp.vue";
 
 const colorScheme = window.matchMedia("(prefers-color-scheme: dark)");

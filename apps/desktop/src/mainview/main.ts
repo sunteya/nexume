@@ -15,4 +15,4 @@ function syncColorScheme(event: MediaQueryList | MediaQueryListEvent): void {
 syncColorScheme(colorScheme);
 colorScheme.addEventListener("change", syncColorScheme);
 
-createApp(HttpAdminApp, { sourceLabel: "Desktop" }).use(ElLoading).mount("#app");
+createApp(HttpAdminApp, { mode: "desktop" }).use(ElLoading).mount("#app");

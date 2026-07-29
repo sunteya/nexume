@@ -119,7 +119,7 @@ export class CollectorManagementService {
       if (this.options.collectors.list().some((item) => item.connectionType === "local")) {
         throw new CollectorManagementError(
           "local_collector_exists",
-          "本机 Collector 已经存在。",
+          "A local collector already exists.",
           409,
         );
       }
@@ -135,7 +135,7 @@ export class CollectorManagementService {
         if (this.options.collectors.list().some((item) => item.connectionType === "local")) {
           throw new CollectorManagementError(
             "local_collector_exists",
-            "本机 Collector 已经存在。",
+            "A local collector already exists.",
             409,
           );
         }
@@ -189,7 +189,7 @@ export class CollectorManagementService {
     if (record.connectionType !== "remote") {
       throw new CollectorManagementError(
         "collector_has_no_token",
-        "本机 Collector 不使用连接 token。",
+        "Local collectors do not use connection tokens.",
         409,
       );
     }
@@ -198,7 +198,7 @@ export class CollectorManagementService {
     if (!token) {
       throw new CollectorManagementError(
         "collector_token_unavailable",
-        "Collector token 无法读取。",
+        "The collector token is unavailable.",
         500,
       );
     }
@@ -210,7 +210,7 @@ export class CollectorManagementService {
     if (!this.triggerSync(id)) {
       throw new CollectorManagementError(
         "collector_offline",
-        "Collector 当前离线，无法立即同步。",
+        "The collector is offline and cannot sync now.",
         409,
       );
     }
@@ -265,7 +265,7 @@ export class CollectorManagementService {
   private notFound(): CollectorManagementError {
     return new CollectorManagementError(
       "collector_not_found",
-      "Collector 不存在。",
+      "The collector does not exist.",
       404,
     );
   }

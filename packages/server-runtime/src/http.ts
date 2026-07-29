@@ -93,11 +93,11 @@ function parseSessionParams(url: URL): ListSessionsParams {
 
 async function parseJsonBody(request: Request): Promise<Record<string, unknown>> {
   const text = await request.text();
-  if (text.length > 65_536) throw new Error("请求内容过大。");
+  if (text.length > 65_536) throw new Error("The request body is too large.");
   if (!text) return {};
   const value = JSON.parse(text) as unknown;
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("请求内容必须是 JSON 对象。");
+    throw new Error("The request body must be a JSON object.");
   }
   return value as Record<string, unknown>;
 }
@@ -160,7 +160,7 @@ export function createRequestHandler(options: RequestHandlerOptions) {
       if (!hasValidToken(request, options.accessToken)) {
         return errorResponse(
           "unauthorized",
-          "访问令牌无效或缺失。",
+          "The access token is missing or invalid.",
           401,
         );
       }
@@ -170,13 +170,13 @@ export function createRequestHandler(options: RequestHandlerOptions) {
         url.pathname === "/api/setup/complete"
       ) {
         if (!options.initialization) {
-          return errorResponse("not_found", "API 不存在。", 404);
+          return errorResponse("not_found", "The API endpoint does not exist.", 404);
         }
 
         if (options.initialization.getStatus().initialized) {
           return errorResponse(
             "already_initialized",
-            "Nexume 已经完成初始化。",
+            "Nexume has already been set up.",
             409,
           );
         }
@@ -189,15 +189,15 @@ export function createRequestHandler(options: RequestHandlerOptions) {
               ? true
               : body.initializeLocalCollector;
           if (typeof value !== "boolean") {
-            throw new Error("initializeLocalCollector 必须是布尔值。");
+            throw new Error("initializeLocalCollector must be a boolean.");
           }
           initializeLocalCollector = value;
         } catch (error) {
           const message = error instanceof SyntaxError
-            ? "请求 JSON 无效。"
+            ? "The request body is not valid JSON."
             : error instanceof Error
               ? error.message
-              : "请求无效。";
+              : "The request is invalid.";
           return errorResponse("invalid_request", message, 400);
         }
 
@@ -208,26 +208,26 @@ export function createRequestHandler(options: RequestHandlerOptions) {
           if (error instanceof AlreadyInitializedError) {
             return errorResponse(
               "already_initialized",
-              "Nexume 已经完成初始化。",
+              "Nexume has already been set up.",
               409,
             );
           }
           options.onError?.(error);
-          return errorResponse("internal_error", "初始化 Nexume 失败。", 500);
+          return errorResponse("internal_error", "Unable to set up Nexume.", 500);
         }
       }
 
       if (options.initialization && !options.initialization.getStatus().initialized) {
         return errorResponse(
           "setup_required",
-          "请先完成 Nexume 初始化。",
+          "Complete the Nexume setup before using this API.",
           428,
         );
       }
 
       if (request.method === "GET" && url.pathname === "/api/runtime") {
         if (!options.getRuntimeInfo) {
-          return errorResponse("not_found", "API 不存在。", 404);
+          return errorResponse("not_found", "The API endpoint does not exist.", 404);
         }
         return sensitiveJson(options.getRuntimeInfo());
       }
@@ -238,25 +238,28 @@ export function createRequestHandler(options: RequestHandlerOptions) {
         try {
           params = parseSessionParams(url);
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          return errorResponse("invalid_request", message, 400);
+          return errorResponse("invalid_request", "The session query is invalid.", 400);
         }
 
         try {
           return json(await options.core.listSessions(params));
         } catch (error) {
           if (error instanceof InvalidSessionCursorError) {
-            return errorResponse("invalid_request", error.message, 400);
+            return errorResponse(
+              "invalid_request",
+              "The session cursor is invalid or does not match the current filters.",
+              400,
+            );
           }
 
           options.onError?.(error);
-          return errorResponse("internal_error", "Server 内部错误。", 500);
+          return errorResponse("internal_error", "The Server encountered an internal error.", 500);
         }
       }
 
       if (url.pathname === "/api/collectors") {
         if (!options.collectors) {
-          return errorResponse("not_found", "API 不存在。", 404);
+          return errorResponse("not_found", "The API endpoint does not exist.", 404);
         }
 
         if (request.method === "GET") {
@@ -272,8 +275,7 @@ export function createRequestHandler(options: RequestHandlerOptions) {
             if (error instanceof CollectorManagementError) {
               return errorResponse(error.code, error.message, error.status);
             }
-            const message = error instanceof Error ? error.message : "请求无效。";
-            return errorResponse("invalid_request", message, 400);
+            return errorResponse("invalid_request", "The collector data is invalid.", 400);
           }
         }
       }
@@ -287,7 +289,7 @@ export function createRequestHandler(options: RequestHandlerOptions) {
             return errorResponse(error.code, error.message, error.status);
           }
           options.onError?.(error);
-          return errorResponse("internal_error", "读取 Collector token 失败。", 500);
+          return errorResponse("internal_error", "Unable to load the collector token.", 500);
         }
       }
 
@@ -301,7 +303,7 @@ export function createRequestHandler(options: RequestHandlerOptions) {
             return errorResponse(error.code, error.message, error.status);
           }
           options.onError?.(error);
-          return errorResponse("internal_error", "触发 Collector 同步失败。", 500);
+          return errorResponse("internal_error", "Unable to start collector sync.", 500);
         }
       }
 
@@ -322,12 +324,11 @@ export function createRequestHandler(options: RequestHandlerOptions) {
           if (error instanceof CollectorManagementError) {
             return errorResponse(error.code, error.message, error.status);
           }
-          const message = error instanceof Error ? error.message : "请求无效。";
-          return errorResponse("invalid_request", message, 400);
+          return errorResponse("invalid_request", "The collector update is invalid.", 400);
         }
       }
 
-      return errorResponse("not_found", "API 不存在。", 404);
+      return errorResponse("not_found", "The API endpoint does not exist.", 404);
     }
 
     if (request.method !== "GET" && request.method !== "HEAD") {

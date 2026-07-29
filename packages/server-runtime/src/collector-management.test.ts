@@ -118,8 +118,8 @@ describe("CollectorManagementService", () => {
 
     service.setSyncTrigger(() => false);
     expect(() => service.sync(created.collector.id)).toThrow(
-      "Collector 当前离线",
+      "The collector is offline",
     );
-    expect(() => service.sync("missing")).toThrow("Collector 不存在");
+    expect(() => service.sync("missing")).toThrow("The collector does not exist");
   });
 });

@@ -2,14 +2,13 @@
 import {
   ElButton,
   ElCheckbox,
-  ElConfigProvider,
   ElInput,
 } from "element-plus";
-import zhCn from "element-plus/es/locale/lang/zh-cn";
 import { ArrowRight, KeyRound, LoaderCircle, RotateCw } from "lucide-vue-next";
 import { onMounted, ref, watch } from "vue";
 
 import type { InitializationClient } from "./client";
+import AuthLayout from "./AuthLayout.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -60,7 +59,7 @@ async function checkStatus(): Promise<void> {
     }
     statusAvailable.value = true;
   } catch (error) {
-    errorMessage.value = errorText(error, "读取初始化状态失败。");
+    errorMessage.value = errorText(error, "Unable to read the setup status.");
   } finally {
     checking.value = false;
   }
@@ -69,7 +68,7 @@ async function checkStatus(): Promise<void> {
 async function complete(): Promise<void> {
   const token = accessToken.value.trim();
   if (props.requiresAccessToken && !token) {
-    errorMessage.value = "请输入访问令牌。";
+    errorMessage.value = "Enter an access token.";
     return;
   }
 
@@ -83,7 +82,7 @@ async function complete(): Promise<void> {
     );
     emit("initialized", token);
   } catch (error) {
-    errorMessage.value = errorText(error, "初始化 Nexume 失败。");
+    errorMessage.value = errorText(error, "Unable to set up Nexume.");
   } finally {
     submitting.value = false;
   }
@@ -93,73 +92,71 @@ onMounted(() => void checkStatus());
 </script>
 
 <template>
-  <el-config-provider :locale="zhCn">
-    <main class="initialization-shell">
-      <section class="initialization-panel" aria-labelledby="initialization-title">
-        <div class="initialization-brand" aria-hidden="true">N</div>
+  <auth-layout
+    :title="checking ? undefined : statusAvailable ? 'Set up Nexume' : 'Setup unavailable'"
+    :description="
+      checking
+        ? 'Checking local data...'
+        : statusAvailable
+          ? 'Complete the initial setup to start using Nexume.'
+          : 'The local setup status could not be read.'
+    "
+    :busy="checking"
+  >
+    <template v-if="checking">
+      <loader-circle class="initialization-spinner" :size="24" />
+    </template>
 
-        <template v-if="checking">
-          <loader-circle class="initialization-spinner" :size="24" />
-          <p>正在检查本地数据</p>
-        </template>
+    <template v-else-if="!statusAvailable">
+      <div class="auth-form">
+        <span class="auth-error" role="alert">
+          {{ errorMessage }}
+        </span>
+        <el-button size="large" :icon="RotateCw" @click="checkStatus">
+          Check again
+        </el-button>
+      </div>
+    </template>
 
-        <template v-else-if="!statusAvailable">
-          <h1 id="initialization-title">Nexume</h1>
-          <p>无法读取初始化状态</p>
-          <div class="initialization-form">
-            <span class="initialization-error" role="alert">
-              {{ errorMessage }}
-            </span>
-            <el-button size="large" :icon="RotateCw" @click="checkStatus">
-              重新检查
-            </el-button>
-          </div>
-        </template>
+    <template v-else>
+      <form class="auth-form" @submit.prevent="complete">
+        <el-input
+          v-if="requiresAccessToken && !initialAccessToken"
+          v-model="accessToken"
+          type="password"
+          size="large"
+          placeholder="Access token"
+          show-password
+          autofocus
+          aria-label="Access token"
+        >
+          <template #prefix>
+            <key-round :size="17" :stroke-width="1.8" />
+          </template>
+        </el-input>
 
-        <template v-else>
-          <h1 id="initialization-title">Nexume</h1>
-          <p>完成首次初始化后即可开始使用</p>
+        <el-checkbox
+          v-if="allowLocalCollectorChoice"
+          v-model="initializeLocalCollector"
+          class="initialization-checkbox"
+        >
+          Create a local collector
+        </el-checkbox>
 
-          <form class="initialization-form" @submit.prevent="complete">
-            <el-input
-              v-if="requiresAccessToken && !initialAccessToken"
-              v-model="accessToken"
-              type="password"
-              size="large"
-              placeholder="访问令牌"
-              show-password
-              autofocus
-              aria-label="访问令牌"
-            >
-              <template #prefix>
-                <key-round :size="17" :stroke-width="1.8" />
-              </template>
-            </el-input>
+        <span v-if="errorMessage" class="auth-error" role="alert">
+          {{ errorMessage }}
+        </span>
 
-            <el-checkbox
-              v-if="allowLocalCollectorChoice"
-              v-model="initializeLocalCollector"
-              class="initialization-checkbox"
-            >
-              初始化本机 Collector
-            </el-checkbox>
-
-            <span v-if="errorMessage" class="initialization-error" role="alert">
-              {{ errorMessage }}
-            </span>
-
-            <el-button
-              type="primary"
-              size="large"
-              native-type="submit"
-              :loading="submitting"
-              :icon="ArrowRight"
-            >
-              开始使用
-            </el-button>
-          </form>
-        </template>
-      </section>
-    </main>
-  </el-config-provider>
+        <el-button
+          type="primary"
+          size="large"
+          native-type="submit"
+          :loading="submitting"
+          :icon="ArrowRight"
+        >
+          Get started
+        </el-button>
+      </form>
+    </template>
+  </auth-layout>
 </template>

@@ -2,7 +2,6 @@
 import {
   ElAlert,
   ElButton,
-  ElConfigProvider,
   ElEmpty,
   ElOption,
   ElSelect,
@@ -12,9 +11,8 @@ import {
   ElTooltip,
   type TableInstance,
 } from "element-plus";
-import zhCn from "element-plus/es/locale/lang/zh-cn";
 import { ChevronDown, RefreshCw } from "lucide-vue-next";
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onActivated, onMounted, ref, watch } from "vue";
 
 import type {
   CollectorQueryWarning,
@@ -23,32 +21,30 @@ import type {
 } from "@nexume/contracts";
 
 import type { CollectorClient, SessionClient } from "./client";
+import PageToolbar from "./PageToolbar.vue";
 
 const props = withDefaults(
   defineProps<{
     client: SessionClient;
     collectorClient: CollectorClient;
     initialCollectorId?: string;
-    sourceLabel?: string;
   }>(),
-  {
-    sourceLabel: "本机",
-  },
+  {},
 );
 
 const emit = defineEmits<{
   "collector-change": [collectorId: string];
 }>();
 
-const dateFormatter = new Intl.DateTimeFormat("zh-CN", {
+const dateFormatter = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
   month: "2-digit",
   day: "2-digit",
   hour: "2-digit",
   minute: "2-digit",
-  hour12: false,
+  hourCycle: "h23",
 });
-const relativeTimeFormatter = new Intl.RelativeTimeFormat("zh-CN", {
+const relativeTimeFormatter = new Intl.RelativeTimeFormat("en", {
   numeric: "auto",
 });
 
@@ -66,16 +62,17 @@ const collectorsErrorMessage = ref("");
 const table = ref<TableInstance>();
 let latestRequest = 0;
 let mounted = false;
+let initialActivation = true;
 
 const resultSummary = computed(() =>
   sessions.value.length === 0
-    ? "尚无 Session"
-    : `已加载 ${sessions.value.length.toLocaleString("zh-CN")} 条`,
+    ? "No sessions"
+    : `${sessions.value.length.toLocaleString("en-US")} loaded`,
 );
 const warningMessage = computed(() =>
   warnings.value
-    .map((warning) => `${warning.collectorName}：${warning.message}`)
-    .join("；"),
+    .map((warning) => `${warning.collectorName}: ${warning.message}`)
+    .join("; "),
 );
 const agentOptions = computed(() => {
   const availableCollectors = selectedCollectorId.value
@@ -85,7 +82,7 @@ const agentOptions = computed(() => {
     : collectors.value;
 
   return [...new Set(availableCollectors.flatMap((collector) => collector.agents))]
-    .sort((left, right) => left.localeCompare(right, "zh-CN"));
+    .sort((left, right) => left.localeCompare(right, "en"));
 });
 
 function getProjectName(directory: string): string {
@@ -97,7 +94,13 @@ function getRowKey(session: SessionSummary): string {
 }
 
 function formatExactTime(timestamp: number): string {
-  return dateFormatter.format(new Date(timestamp));
+  const parts = Object.fromEntries(
+    dateFormatter
+      .formatToParts(new Date(timestamp))
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
 }
 
 function formatRelativeTime(timestamp: number): string {
@@ -167,7 +170,7 @@ async function loadSessions(append = false): Promise<void> {
   } catch (error) {
     if (requestId !== latestRequest) return;
     errorMessage.value =
-      error instanceof Error ? error.message : "读取 Session 失败。";
+      error instanceof Error ? error.message : "Unable to load sessions.";
   } finally {
     if (requestId === latestRequest) loading.value = false;
   }
@@ -182,7 +185,7 @@ async function loadCollectors(): Promise<void> {
     collectors.value = await props.collectorClient.list();
   } catch (error) {
     collectorsErrorMessage.value =
-      error instanceof Error ? error.message : "读取 Collector 失败。";
+      error instanceof Error ? error.message : "Unable to load collectors.";
   } finally {
     collectorsLoading.value = false;
   }
@@ -224,50 +227,46 @@ onMounted(() => {
   mounted = true;
   void refresh();
 });
+
+onActivated(() => {
+  if (initialActivation) {
+    initialActivation = false;
+    return;
+  }
+  void refresh();
+});
 </script>
 
 <template>
-  <el-config-provider :locale="zhCn">
-    <main class="app-shell">
-      <header class="app-header">
-        <div class="brand-mark" aria-hidden="true">N</div>
-
-        <div class="page-heading">
-          <h1>Sessions</h1>
-          <div class="source-line">
-            <span>{{ sourceLabel }}</span>
-            <span class="source-separator" aria-hidden="true"></span>
-            <span>{{ resultSummary }}</span>
-          </div>
-        </div>
-
-        <slot name="header-actions" />
-
-        <el-tooltip content="刷新 Session" placement="bottom">
+  <section class="app-view session-view">
+    <page-toolbar title="Sessions" :summary="resultSummary">
+      <template #actions>
+        <el-tooltip content="Refresh sessions" placement="bottom">
           <el-button
             class="refresh-button"
             circle
             :loading="loading"
-            aria-label="刷新 Session"
+            aria-label="Refresh sessions"
             @click="refresh"
           >
             <refresh-cw :size="17" :stroke-width="1.8" />
           </el-button>
         </el-tooltip>
-      </header>
+      </template>
+    </page-toolbar>
 
-      <section class="session-filter-toolbar" aria-label="Session 筛选">
+      <section class="session-filter-toolbar" aria-label="Session filters">
         <label class="session-filter-field">
           <span>Collector</span>
           <el-select
             v-model="selectedCollectorId"
             class="session-filter-select"
             :loading="collectorsLoading"
-            placeholder="全部 Collector"
-            aria-label="按 Collector 筛选"
+            placeholder="All collectors"
+            aria-label="Filter by collector"
             @change="handleCollectorChange"
           >
-            <el-option label="全部 Collector" value="" />
+            <el-option label="All collectors" value="" />
             <el-option
               v-for="collector in collectors"
               :key="collector.id"
@@ -282,11 +281,11 @@ onMounted(() => {
           <el-select
             v-model="selectedAgent"
             class="session-filter-select"
-            placeholder="全部 Agent"
-            aria-label="按 Agent 筛选"
+            placeholder="All agents"
+            aria-label="Filter by agent"
             @change="handleAgentChange"
           >
-            <el-option label="全部 Agent" value="" />
+            <el-option label="All agents" value="" />
             <el-option
               v-for="agent in agentOptions"
               :key="agent"
@@ -306,7 +305,7 @@ onMounted(() => {
         :closable="false"
       >
         <template #default>
-          <el-button size="small" @click="loadSessions(false)">重新加载</el-button>
+          <el-button size="small" @click="loadSessions(false)">Retry</el-button>
         </template>
       </el-alert>
 
@@ -328,7 +327,7 @@ onMounted(() => {
         :closable="false"
       />
 
-      <section class="table-region" aria-label="Session 列表">
+      <section class="table-region" aria-label="Session list">
         <el-table
           ref="table"
           v-loading="loading"
@@ -338,13 +337,13 @@ onMounted(() => {
           table-layout="fixed"
           scrollbar-always-on
         >
-          <el-table-column label="标题" min-width="250" show-overflow-tooltip>
+          <el-table-column label="Title" min-width="250" show-overflow-tooltip>
             <template #default="{ row }">
-              <span class="session-title">{{ row.title || "未命名 Session" }}</span>
+              <span class="session-title">{{ row.title || "Untitled session" }}</span>
             </template>
           </el-table-column>
 
-          <el-table-column label="来源" width="130" show-overflow-tooltip>
+          <el-table-column label="Collector" width="140" show-overflow-tooltip>
             <template #default="{ row }">
               {{ row.collectorName }}
             </template>
@@ -356,7 +355,7 @@ onMounted(() => {
             </template>
           </el-table-column>
 
-          <el-table-column label="项目" width="140" show-overflow-tooltip>
+          <el-table-column label="Project" width="150" show-overflow-tooltip>
             <template #default="{ row }">
               {{ getProjectName(row.directory) }}
             </template>
@@ -364,12 +363,12 @@ onMounted(() => {
 
           <el-table-column
             prop="directory"
-            label="目录"
+            label="Directory"
             min-width="260"
             show-overflow-tooltip
           />
 
-          <el-table-column label="更新时间" width="160">
+          <el-table-column label="Updated" width="160">
             <template #default="{ row }">
               <el-tooltip :content="formatExactTime(row.updatedAt)" placement="top">
                 <span class="updated-time">{{ formatRelativeTime(row.updatedAt) }}</span>
@@ -386,7 +385,7 @@ onMounted(() => {
           <template #empty>
             <el-empty
               :image-size="64"
-              :description="errorMessage ? '暂时无法读取 Session' : '未发现 Session'"
+              :description="errorMessage ? 'Sessions are unavailable' : 'No sessions found'"
             />
           </template>
         </el-table>
@@ -400,10 +399,9 @@ onMounted(() => {
           :icon="ChevronDown"
           @click="loadSessions(true)"
         >
-          加载更多
+          Load more
         </el-button>
-        <span v-else-if="sessions.length > 0">已加载全部</span>
+        <span v-else-if="sessions.length > 0">All sessions loaded</span>
       </footer>
-    </main>
-  </el-config-provider>
+  </section>
 </template>

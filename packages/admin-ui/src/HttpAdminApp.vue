@@ -3,8 +3,9 @@ import {
   type CollectorClient,
   type SessionClient,
 } from "./client";
-import { ElButton, ElInput, ElTooltip } from "element-plus";
-import { Database, KeyRound, List, LogOut } from "lucide-vue-next";
+import { ElButton, ElConfigProvider, ElInput } from "element-plus";
+import en from "element-plus/es/locale/lang/en";
+import { KeyRound } from "lucide-vue-next";
 import { ref, shallowRef } from "vue";
 
 import {
@@ -13,12 +14,14 @@ import {
   createHttpSessionClient,
 } from "./http-client";
 import CollectorApp from "./CollectorApp.vue";
+import AppTopBar, { type AppMode, type AppView } from "./AppTopBar.vue";
+import AuthLayout from "./AuthLayout.vue";
 import InitializationApp from "./InitializationApp.vue";
 import SessionApp from "./SessionApp.vue";
 
 const props = withDefaults(
-  defineProps<{ sourceLabel?: string }>(),
-  { sourceLabel: "Server" },
+  defineProps<{ mode?: AppMode }>(),
+  { mode: "server" },
 );
 
 const storageKey = "nexume.accessToken";
@@ -27,7 +30,7 @@ const tokenInput = ref("");
 const authError = ref("");
 const client = shallowRef<SessionClient>();
 const collectorClient = shallowRef<CollectorClient>();
-const activeView = ref<"sessions" | "collectors">("sessions");
+const activeView = ref<AppView>("sessions");
 const selectedCollectorId = ref("");
 const initializationReady = ref(false);
 const bootstrapReady = ref(false);
@@ -37,7 +40,7 @@ function clearAccessToken(): void {
   accessToken.value = "";
   client.value = undefined;
   collectorClient.value = undefined;
-  authError.value = "访问令牌无效，请重新输入。";
+  authError.value = "The access token is invalid. Enter a valid token to continue.";
   selectedCollectorId.value = "";
 }
 
@@ -69,7 +72,7 @@ if (accessToken.value) {
 function connect(): void {
   const token = tokenInput.value.trim();
   if (!token) {
-    authError.value = "请输入访问令牌。";
+    authError.value = "Enter an access token.";
     return;
   }
 
@@ -117,112 +120,58 @@ bootstrap();
 </script>
 
 <template>
-  <main v-if="!bootstrapReady" class="auth-shell" aria-label="正在连接 Nexume">
-    <section class="auth-panel">
-      <div class="auth-brand" aria-hidden="true">N</div>
-      <p>正在连接 Nexume</p>
-    </section>
-  </main>
+  <el-config-provider :locale="en">
+    <auth-layout v-if="!bootstrapReady" description="Connecting to Nexume..." busy />
 
-  <initialization-app
-    v-else-if="!initializationReady"
-    :client="initializationClient"
-    requires-access-token
-    allow-local-collector-choice
-    :initial-access-token="accessToken"
-    @initialized="handleInitialized"
-  />
+    <initialization-app
+      v-else-if="!initializationReady"
+      :client="initializationClient"
+      requires-access-token
+      allow-local-collector-choice
+      :initial-access-token="accessToken"
+      @initialized="handleInitialized"
+    />
 
-  <session-app
-    v-else-if="activeView === 'sessions' && client && collectorClient"
-    :client="client"
-    :collector-client="collectorClient"
-    :initial-collector-id="selectedCollectorId"
-    :source-label="props.sourceLabel"
-    @collector-change="selectedCollectorId = $event"
-  >
-    <template #header-actions>
-      <nav class="server-view-nav" :aria-label="`${props.sourceLabel} 视图`">
-        <el-tooltip content="Sessions" placement="bottom">
-          <el-button
-            class="server-nav-button"
-            type="primary"
-            :icon="List"
-            aria-label="Sessions"
-          >
-            <span class="nav-label">Sessions</span>
-          </el-button>
-        </el-tooltip>
-        <el-tooltip content="Collectors" placement="bottom">
-          <el-button
-            class="server-nav-button"
-            :icon="Database"
-            aria-label="Collectors"
-            @click="activeView = 'collectors'"
-          >
-            <span class="nav-label">Collectors</span>
-          </el-button>
-        </el-tooltip>
-      </nav>
-      <el-tooltip content="退出登录" placement="bottom">
-        <el-button circle aria-label="退出登录" @click="disconnect">
-          <log-out :size="17" :stroke-width="1.8" />
-        </el-button>
-      </el-tooltip>
-    </template>
-  </session-app>
+    <main v-else-if="client && collectorClient" class="app-shell">
+      <app-top-bar
+        :mode="props.mode"
+        :active-view="activeView"
+        @navigate="activeView = $event"
+        @disconnect="disconnect"
+      />
 
-  <collector-app
-    v-else-if="collectorClient"
-    :client="collectorClient"
-    @view-sessions="viewCollectorSessions"
-  >
-    <template #header-actions>
-      <nav class="server-view-nav" :aria-label="`${props.sourceLabel} 视图`">
-        <el-tooltip content="Sessions" placement="bottom">
-          <el-button
-            class="server-nav-button"
-            :icon="List"
-            aria-label="Sessions"
-            @click="activeView = 'sessions'"
-          >
-            <span class="nav-label">Sessions</span>
-          </el-button>
-        </el-tooltip>
-        <el-tooltip content="Collectors" placement="bottom">
-          <el-button
-            class="server-nav-button"
-            type="primary"
-            :icon="Database"
-            aria-label="Collectors"
-          >
-            <span class="nav-label">Collectors</span>
-          </el-button>
-        </el-tooltip>
-      </nav>
-      <el-tooltip content="退出登录" placement="bottom">
-        <el-button circle aria-label="退出登录" @click="disconnect">
-          <log-out :size="17" :stroke-width="1.8" />
-        </el-button>
-      </el-tooltip>
-    </template>
-  </collector-app>
+      <keep-alive>
+        <session-app
+          v-if="activeView === 'sessions'"
+          :client="client"
+          :collector-client="collectorClient"
+          :initial-collector-id="selectedCollectorId"
+          @collector-change="selectedCollectorId = $event"
+        />
+        <collector-app
+          v-else
+          :client="collectorClient"
+          @view-sessions="viewCollectorSessions"
+        />
+      </keep-alive>
+    </main>
 
-  <main v-else class="auth-shell">
-    <section class="auth-panel" aria-labelledby="auth-title">
-      <div class="auth-brand" aria-hidden="true">N</div>
-      <h1 id="auth-title">Nexume</h1>
-      <p>输入管理 token</p>
+    <auth-layout
+      v-else-if="props.mode === 'desktop'"
+      title="Connection lost"
+      description="Restart Nexume Desktop to reconnect."
+    />
 
+    <auth-layout v-else title="Connect to Server" description="Enter the administrator access token.">
       <form class="auth-form" @submit.prevent="connect">
         <el-input
           v-model="tokenInput"
           type="password"
           size="large"
-          placeholder="访问令牌"
+          placeholder="Access token"
           show-password
           autofocus
-          aria-label="访问令牌"
+          aria-label="Access token"
         >
           <template #prefix>
             <key-round :size="17" :stroke-width="1.8" />
@@ -230,9 +179,9 @@ bootstrap();
         </el-input>
         <span v-if="authError" class="auth-error" role="alert">{{ authError }}</span>
         <el-button type="primary" size="large" native-type="submit">
-          连接 Server
+          Connect
         </el-button>
       </form>
-    </section>
-  </main>
+    </auth-layout>
+  </el-config-provider>
 </template>

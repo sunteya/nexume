@@ -126,7 +126,12 @@ export function startServerRuntime(options: StartServerRuntimeOptions) {
     error(error) {
       options.onError?.(error);
       return Response.json(
-        { error: { code: "internal_error", message: "Server 内部错误。" } },
+        {
+          error: {
+            code: "internal_error",
+            message: "The Server encountered an internal error.",
+          },
+        },
         { status: 500 },
       );
     },

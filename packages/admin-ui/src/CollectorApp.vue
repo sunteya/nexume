@@ -2,8 +2,10 @@
 import {
   ElAlert,
   ElButton,
-  ElConfigProvider,
   ElDialog,
+  ElDropdown,
+  ElDropdownItem,
+  ElDropdownMenu,
   ElEmpty,
   ElForm,
   ElFormItem,
@@ -18,13 +20,13 @@ import {
   ElTooltip,
   type DialogTransition,
 } from "element-plus";
-import zhCn from "element-plus/es/locale/lang/zh-cn";
 import {
   Check,
   Clipboard,
   Copy,
   KeyRound,
   List,
+  Ellipsis,
   Pencil,
   Plus,
   RefreshCw,
@@ -32,7 +34,7 @@ import {
   Trash2,
   X,
 } from "lucide-vue-next";
-import { computed, onMounted, ref } from "vue";
+import { computed, onActivated, onMounted, onUnmounted, ref } from "vue";
 
 import type {
   CollectorConnectionType,
@@ -42,6 +44,7 @@ import type {
 } from "@nexume/contracts";
 
 import type { CollectorClient } from "./client";
+import PageToolbar from "./PageToolbar.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -75,6 +78,9 @@ const tokenLoading = ref(false);
 const syncingCollectorIds = ref(new Set<string>());
 const showTokenAfterCreate = ref(false);
 const runtimeInfo = ref<RuntimeInfo>();
+const compactActionsMedia = window.matchMedia("(max-width: 520px)");
+const compactActions = ref(compactActionsMedia.matches);
+let initialActivation = true;
 
 const hasLocalCollector = computed(() =>
   collectors.value.some((collector) => collector.connectionType === "local"),
@@ -82,6 +88,18 @@ const hasLocalCollector = computed(() =>
 const onlineCount = computed(
   () => collectors.value.filter((collector) => collector.online).length,
 );
+const collectorSummary = computed(
+  () => `${collectors.value.length} total / ${onlineCount.value} online`,
+);
+const relativeTimeFormatter = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+const dateFormatter = new Intl.DateTimeFormat("en-US", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
 
 function errorText(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
@@ -92,50 +110,44 @@ function asCollector(value: unknown): ManagedCollectorInfo {
 }
 
 function formatAgents(collector: ManagedCollectorInfo): string {
-  return collector.agents.length > 0 ? collector.agents.join(", ") : "未知";
+  return collector.agents.length > 0 ? collector.agents.join(", ") : "Unknown";
 }
 
 function formatLastActivity(timestamp: number | undefined): string {
-  if (!timestamp) return "从未连接";
+  if (!timestamp) return "Never connected";
   const elapsedSeconds = Math.round((timestamp - Date.now()) / 1_000);
   const absoluteSeconds = Math.abs(elapsedSeconds);
   if (absoluteSeconds < 60) {
-    return new Intl.RelativeTimeFormat("zh-CN", { numeric: "auto" }).format(
-      elapsedSeconds,
-      "second",
-    );
+    return relativeTimeFormatter.format(elapsedSeconds, "second");
   }
 
   const elapsedMinutes = Math.round(elapsedSeconds / 60);
   if (Math.abs(elapsedMinutes) < 60) {
-    return new Intl.RelativeTimeFormat("zh-CN", { numeric: "auto" }).format(
-      elapsedMinutes,
-      "minute",
-    );
+    return relativeTimeFormatter.format(elapsedMinutes, "minute");
   }
 
-  return new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date(timestamp));
+  const elapsedHours = Math.round(elapsedMinutes / 60);
+  if (Math.abs(elapsedHours) < 24) {
+    return relativeTimeFormatter.format(elapsedHours, "hour");
+  }
+
+  const elapsedDays = Math.round(elapsedHours / 24);
+  if (Math.abs(elapsedDays) < 30) {
+    return relativeTimeFormatter.format(elapsedDays, "day");
+  }
+
+  return formatExactTime(timestamp);
 }
 
 function formatExactTime(timestamp: number | undefined): string {
-  return timestamp
-    ? new Intl.DateTimeFormat("zh-CN", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: false,
-      }).format(new Date(timestamp))
-    : "从未连接";
+  if (!timestamp) return "Never connected";
+  const parts = Object.fromEntries(
+    dateFormatter
+      .formatToParts(new Date(timestamp))
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
 }
 
 async function loadCollectors(): Promise<void> {
@@ -150,7 +162,7 @@ async function loadCollectors(): Promise<void> {
     collectors.value = items;
     runtimeInfo.value = runtime;
   } catch (error) {
-    errorMessage.value = errorText(error, "读取 Collector 失败。");
+    errorMessage.value = errorText(error, "Unable to load collectors.");
   } finally {
     loading.value = false;
   }
@@ -167,7 +179,7 @@ function openCreate(): void {
 async function createCollector(): Promise<void> {
   const name = createName.value.trim();
   if (!name) {
-    ElMessage.error("请输入 Collector 名称。");
+    ElMessage.error("Enter a collector name.");
     return;
   }
 
@@ -182,17 +194,17 @@ async function createCollector(): Promise<void> {
     collectors.value = [
       ...collectors.value.filter((collector) => collector.id !== result.collector.id),
       result.collector,
-    ].sort((left, right) => left.name.localeCompare(right.name, "zh-CN"));
+    ].sort((left, right) => left.name.localeCompare(right.name, "en"));
 
     if (result.token) {
-      tokenTitle.value = `${result.collector.name} 的连接 token`;
+      tokenTitle.value = `${result.collector.name} connection token`;
       tokenValue.value = result.token;
       showTokenAfterCreate.value = true;
     } else {
-      ElMessage.success("Collector 已创建。");
+      ElMessage.success("Collector created.");
     }
   } catch (error) {
-    ElMessage.error(errorText(error, "创建 Collector 失败。"));
+    ElMessage.error(errorText(error, "Unable to create the collector."));
   } finally {
     creating.value = false;
   }
@@ -213,7 +225,7 @@ function openRename(collector: ManagedCollectorInfo): void {
 async function renameCollector(): Promise<void> {
   const name = renameName.value.trim();
   if (!name) {
-    ElMessage.error("请输入 Collector 名称。");
+    ElMessage.error("Enter a collector name.");
     return;
   }
 
@@ -223,9 +235,9 @@ async function renameCollector(): Promise<void> {
     const index = collectors.value.findIndex((collector) => collector.id === updated.id);
     if (index >= 0) collectors.value[index] = updated;
     renameDialog.value = false;
-    ElMessage.success("Collector 名称已更新。");
+    ElMessage.success("Collector name updated.");
   } catch (error) {
-    ElMessage.error(errorText(error, "修改 Collector 名称失败。"));
+    ElMessage.error(errorText(error, "Unable to rename the collector."));
   } finally {
     renaming.value = false;
   }
@@ -234,12 +246,12 @@ async function renameCollector(): Promise<void> {
 async function deleteCollector(collector: ManagedCollectorInfo): Promise<void> {
   try {
     await ElMessageBox.confirm(
-      `确定删除 Collector “${collector.name}”吗？连接信息和已缓存的 Session 都会被移除。`,
-      "删除 Collector",
+      `Delete collector "${collector.name}"? Its connection details and cached sessions will be removed.`,
+      "Delete collector",
       {
         type: "warning",
-        confirmButtonText: "删除",
-        cancelButtonText: "取消",
+        confirmButtonText: "Delete",
+        cancelButtonText: "Cancel",
       },
     );
   } catch {
@@ -249,9 +261,9 @@ async function deleteCollector(collector: ManagedCollectorInfo): Promise<void> {
   try {
     await props.client.delete(collector.id);
     collectors.value = collectors.value.filter((item) => item.id !== collector.id);
-    ElMessage.success("Collector 已删除。");
+    ElMessage.success("Collector deleted.");
   } catch (error) {
-    ElMessage.error(errorText(error, "删除 Collector 失败。"));
+    ElMessage.error(errorText(error, "Unable to delete the collector."));
   }
 }
 
@@ -259,11 +271,11 @@ async function showToken(collector: ManagedCollectorInfo): Promise<void> {
   tokenLoading.value = true;
   try {
     const result = await props.client.getToken(collector.id);
-    tokenTitle.value = `${collector.name} 的连接 token`;
+    tokenTitle.value = `${collector.name} connection token`;
     tokenValue.value = result.token;
     tokenDialog.value = true;
   } catch (error) {
-    ElMessage.error(errorText(error, "读取 Collector token 失败。"));
+    ElMessage.error(errorText(error, "Unable to load the collector token."));
   } finally {
     tokenLoading.value = false;
   }
@@ -273,9 +285,9 @@ async function syncCollector(collector: ManagedCollectorInfo): Promise<void> {
   syncingCollectorIds.value = new Set(syncingCollectorIds.value).add(collector.id);
   try {
     await props.client.sync(collector.id);
-    ElMessage.success(`已触发 ${collector.name} 同步。`);
+    ElMessage.success(`Sync requested for ${collector.name}.`);
   } catch (error) {
-    ElMessage.error(errorText(error, "触发 Collector 同步失败。"));
+    ElMessage.error(errorText(error, "Unable to start collector sync."));
   } finally {
     const next = new Set(syncingCollectorIds.value);
     next.delete(collector.id);
@@ -284,7 +296,7 @@ async function syncCollector(collector: ManagedCollectorInfo): Promise<void> {
 }
 
 async function copyToken(): Promise<void> {
-  await copyText(tokenValue.value, "token 已复制。");
+  await copyText(tokenValue.value, "Token copied.");
 }
 
 async function copyText(value: string, success: string): Promise<void> {
@@ -292,56 +304,62 @@ async function copyText(value: string, success: string): Promise<void> {
     await navigator.clipboard.writeText(value);
     ElMessage.success(success);
   } catch {
-    ElMessage.error("复制失败，请手动复制 token。");
+    ElMessage.error("Copy failed. Copy the token manually.");
   }
 }
 
-onMounted(() => void loadCollectors());
+function syncCompactActions(event: MediaQueryListEvent): void {
+  compactActions.value = event.matches;
+}
+
+onMounted(() => {
+  compactActionsMedia.addEventListener("change", syncCompactActions);
+  void loadCollectors();
+});
+
+onActivated(() => {
+  if (initialActivation) {
+    initialActivation = false;
+    return;
+  }
+  void loadCollectors();
+});
+
+onUnmounted(() => {
+  compactActionsMedia.removeEventListener("change", syncCompactActions);
+});
 </script>
 
 <template>
-  <el-config-provider :locale="zhCn">
-    <main class="app-shell collector-shell">
-      <header class="app-header collector-header">
-        <div class="brand-mark" aria-hidden="true">N</div>
-
-        <div class="page-heading">
-          <h1>Collectors</h1>
-          <div class="source-line">
-            <el-tag effect="plain" size="small">管理</el-tag>
-            <span>{{ collectors.length }} 个 Collector</span>
-            <span class="source-separator" aria-hidden="true"></span>
-            <span>{{ onlineCount }} 个在线</span>
-          </div>
-        </div>
-
-        <slot name="header-actions" />
-
-        <el-tooltip content="刷新 Collector" placement="bottom">
+  <section class="app-view collector-view">
+    <page-toolbar title="Collectors" :summary="collectorSummary">
+      <template #actions>
+        <el-tooltip content="Refresh collectors" placement="bottom">
           <el-button
             class="refresh-button"
             circle
             :loading="loading"
-            aria-label="刷新 Collector"
+            aria-label="Refresh collectors"
             @click="loadCollectors"
           >
             <refresh-cw :size="17" :stroke-width="1.8" />
           </el-button>
         </el-tooltip>
 
-        <el-tooltip content="新建 Collector" placement="bottom">
+        <el-tooltip content="New collector" placement="bottom">
           <el-button
             class="collector-create-button"
             type="primary"
             :icon="Plus"
-            aria-label="新建 Collector"
+            aria-label="New collector"
             :disabled="!allowRemoteCollectors && hasLocalCollector"
             @click="openCreate"
           >
-            新建
+            New collector
           </el-button>
         </el-tooltip>
-      </header>
+      </template>
+    </page-toolbar>
 
       <el-alert
         v-if="errorMessage"
@@ -355,21 +373,21 @@ onMounted(() => void loadCollectors());
       <section
         v-if="runtimeInfo?.kind === 'desktop'"
         class="desktop-runtime-bar"
-        aria-label="Desktop Server 连接信息"
+        aria-label="Desktop Server connection details"
       >
         <div class="desktop-runtime-status">
           <span class="runtime-status-dot" aria-hidden="true"></span>
           <strong>Desktop Server</strong>
-          <span>端口 {{ runtimeInfo.port }}</span>
+          <span>Port {{ runtimeInfo.port }}</span>
         </div>
         <div class="desktop-runtime-values">
           <div v-for="url in runtimeInfo.urls" :key="url" class="runtime-value">
             <code>{{ url }}</code>
-            <el-tooltip content="复制访问地址" placement="top">
+            <el-tooltip content="Copy address" placement="top">
               <el-button
                 link
-                aria-label="复制访问地址"
-                @click="copyText(url, '访问地址已复制。')"
+                aria-label="Copy address"
+                @click="copyText(url, 'Address copied.')"
               >
                 <copy :size="15" :stroke-width="1.8" />
               </el-button>
@@ -378,7 +396,7 @@ onMounted(() => void loadCollectors());
         </div>
       </section>
 
-      <section class="table-region collector-table-region" aria-label="Collector 列表">
+      <section class="table-region collector-table-region" aria-label="Collector list">
         <!-- @vue-generic {ManagedCollectorInfo} -->
         <el-table
           v-loading="loading"
@@ -390,7 +408,7 @@ onMounted(() => void loadCollectors());
         >
           <el-table-column
             prop="name"
-            label="名称"
+            label="Name"
             min-width="170"
             show-overflow-tooltip
           >
@@ -399,32 +417,32 @@ onMounted(() => void loadCollectors());
             </template>
           </el-table-column>
 
-          <el-table-column label="状态" width="92">
+          <el-table-column label="Status" width="96">
             <template #default="{ row }">
               <el-tag :type="row.online ? 'success' : 'info'" effect="plain" size="small">
                 <check v-if="row.online" :size="12" />
                 <x v-else :size="12" />
-                {{ row.online ? "在线" : "离线" }}
+                {{ row.online ? "Online" : "Offline" }}
               </el-tag>
             </template>
           </el-table-column>
 
-          <el-table-column label="类型" width="92">
+          <el-table-column label="Type" width="96">
             <template #default="{ row }">
               <span class="collector-type">
                 <server :size="14" :stroke-width="1.8" />
-                {{ row.connectionType === "local" ? "本机" : "远程" }}
+                {{ row.connectionType === "local" ? "Local" : "Remote" }}
               </span>
             </template>
           </el-table-column>
 
           <el-table-column
             prop="hostname"
-            label="主机"
+            label="Host"
             min-width="150"
             show-overflow-tooltip
           >
-            <template #default="{ row }">{{ row.hostname || "未知" }}</template>
+            <template #default="{ row }">{{ row.hostname || "Unknown" }}</template>
           </el-table-column>
 
           <el-table-column label="Agent" width="110" show-overflow-tooltip>
@@ -435,14 +453,14 @@ onMounted(() => void loadCollectors());
 
           <el-table-column
             prop="version"
-            label="版本"
+            label="Version"
             width="105"
             show-overflow-tooltip
           >
-            <template #default="{ row }">{{ row.version || "未知" }}</template>
+            <template #default="{ row }">{{ row.version || "Unknown" }}</template>
           </el-table-column>
 
-          <el-table-column label="最后活动" width="152">
+          <el-table-column label="Last active" width="152">
             <template #default="{ row }">
               <el-tooltip :content="formatExactTime(row.lastSeenAt)" placement="top">
                 <span class="updated-time">{{ formatLastActivity(row.lastSeenAt) }}</span>
@@ -450,23 +468,28 @@ onMounted(() => void loadCollectors());
             </template>
           </el-table-column>
 
-          <el-table-column label="" width="198" fixed="right" align="right">
+          <el-table-column
+            label=""
+            :width="compactActions ? 52 : 184"
+            fixed="right"
+            align="right"
+          >
             <template #default="{ row }">
-              <div class="collector-row-actions">
-                <el-tooltip content="查看 Sessions" placement="top">
+              <div v-if="!compactActions" class="collector-row-actions">
+                <el-tooltip content="View sessions" placement="top">
                   <el-button
                     link
-                    aria-label="查看 Sessions"
+                    aria-label="View sessions"
                     @click="emit('view-sessions', row.id)"
                   >
                     <list :size="15" :stroke-width="1.8" />
                   </el-button>
                 </el-tooltip>
-                <el-tooltip content="立即同步" placement="top">
+                <el-tooltip content="Sync now" placement="top">
                   <el-button
                     link
                     :loading="syncingCollectorIds.has(row.id)"
-                    aria-label="立即同步"
+                    aria-label="Sync now"
                     @click="syncCollector(asCollector(row))"
                   >
                     <refresh-cw
@@ -476,10 +499,10 @@ onMounted(() => void loadCollectors());
                     />
                   </el-button>
                 </el-tooltip>
-                <el-tooltip content="修改名称" placement="top">
+                <el-tooltip content="Rename" placement="top">
                   <el-button
                     link
-                    aria-label="修改名称"
+                    aria-label="Rename collector"
                     @click="openRename(asCollector(row))"
                   >
                     <pencil :size="15" :stroke-width="1.8" />
@@ -487,83 +510,121 @@ onMounted(() => void loadCollectors());
                 </el-tooltip>
                 <el-tooltip
                   v-if="row.connectionType === 'remote'"
-                  content="查看 token"
+                  content="View token"
                   placement="top"
                 >
                   <el-button
                     link
                     :loading="tokenLoading"
-                    aria-label="查看 token"
+                    aria-label="View token"
                     @click="showToken(asCollector(row))"
                   >
                     <key-round :size="15" :stroke-width="1.8" />
                   </el-button>
                 </el-tooltip>
-                <el-tooltip content="删除 Collector" placement="top">
+                <el-tooltip content="Delete collector" placement="top">
                   <el-button
                     link
                     class="danger-action"
-                    aria-label="删除 Collector"
+                    aria-label="Delete collector"
                     @click="deleteCollector(asCollector(row))"
                   >
                     <Trash2 :size="15" :stroke-width="1.8" />
                   </el-button>
                 </el-tooltip>
               </div>
+
+              <el-dropdown v-else trigger="click" placement="bottom-end">
+                <el-button link class="collector-overflow-button" aria-label="Collector actions">
+                  <ellipsis :size="17" :stroke-width="1.8" />
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item :icon="List" @click="emit('view-sessions', row.id)">
+                      View sessions
+                    </el-dropdown-item>
+                    <el-dropdown-item
+                      :icon="RefreshCw"
+                      :disabled="syncingCollectorIds.has(row.id)"
+                      @click="syncCollector(asCollector(row))"
+                    >
+                      {{ syncingCollectorIds.has(row.id) ? "Syncing..." : "Sync now" }}
+                    </el-dropdown-item>
+                    <el-dropdown-item :icon="Pencil" @click="openRename(asCollector(row))">
+                      Rename
+                    </el-dropdown-item>
+                    <el-dropdown-item
+                      v-if="row.connectionType === 'remote'"
+                      :icon="KeyRound"
+                      @click="showToken(asCollector(row))"
+                    >
+                      View token
+                    </el-dropdown-item>
+                    <el-dropdown-item
+                      :icon="Trash2"
+                      divided
+                      class="danger-dropdown-item"
+                      @click="deleteCollector(asCollector(row))"
+                    >
+                      Delete
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
             </template>
           </el-table-column>
 
           <template #empty>
-            <el-empty :image-size="64" description="尚未配置 Collector" />
+            <el-empty :image-size="64" description="No collectors configured" />
           </template>
         </el-table>
       </section>
 
       <el-dialog
         v-model="createDialog"
-        title="新建 Collector"
+        title="New collector"
         width="min(92vw, 440px)"
         :transition="dialogTransition"
         @closed="handleCreateClosed"
       >
         <el-form label-position="top" @submit.prevent="createCollector">
-          <el-form-item label="类型">
+          <el-form-item label="Type">
             <el-radio-group v-model="createType" class="collector-type-choice">
               <el-radio-button value="local" :disabled="hasLocalCollector">
-                本机
+                Local
               </el-radio-button>
               <el-radio-button v-if="allowRemoteCollectors" value="remote">
-                远程
+                Remote
               </el-radio-button>
             </el-radio-group>
           </el-form-item>
-          <el-form-item label="名称" required>
+          <el-form-item label="Name" required>
             <el-input
               v-model="createName"
               maxlength="128"
               show-word-limit
-              placeholder="例如：开发机"
+              placeholder="For example, Development Mac"
               autofocus
               @keyup.enter="createCollector"
             />
           </el-form-item>
         </el-form>
         <template #footer>
-          <el-button @click="createDialog = false">取消</el-button>
+          <el-button @click="createDialog = false">Cancel</el-button>
           <el-button
             type="primary"
             :loading="creating"
             :icon="Plus"
             @click="createCollector"
           >
-            创建
+            Create
           </el-button>
         </template>
       </el-dialog>
 
       <el-dialog
         v-model="renameDialog"
-        title="修改 Collector 名称"
+        title="Rename collector"
         width="min(92vw, 440px)"
         :transition="dialogTransition"
       >
@@ -575,14 +636,14 @@ onMounted(() => void loadCollectors());
           @keyup.enter="renameCollector"
         />
         <template #footer>
-          <el-button @click="renameDialog = false">取消</el-button>
+          <el-button @click="renameDialog = false">Cancel</el-button>
           <el-button
             type="primary"
             :loading="renaming"
             :icon="Pencil"
             @click="renameCollector"
           >
-            保存
+            Save
           </el-button>
         </template>
       </el-dialog>
@@ -594,19 +655,18 @@ onMounted(() => void loadCollectors());
         :transition="dialogTransition"
       >
         <p class="token-dialog-note">
-          请保存此 token，用于远程 Collector 连接 Server。
+          Save this token. It is required to connect a remote collector to the Server.
         </p>
         <div class="token-value-row">
           <el-input :model-value="tokenValue" readonly class="token-value-input" />
-          <el-tooltip content="复制 token" placement="top">
-            <el-button circle aria-label="复制 token" :icon="Copy" @click="copyToken" />
+          <el-tooltip content="Copy token" placement="top">
+            <el-button circle aria-label="Copy token" :icon="Copy" @click="copyToken" />
           </el-tooltip>
         </div>
         <template #footer>
-          <el-button :icon="Clipboard" @click="copyToken">复制 token</el-button>
-          <el-button type="primary" @click="tokenDialog = false">关闭</el-button>
+          <el-button :icon="Clipboard" @click="copyToken">Copy token</el-button>
+          <el-button type="primary" @click="tokenDialog = false">Close</el-button>
         </template>
       </el-dialog>
-    </main>
-  </el-config-provider>
+  </section>
 </template>

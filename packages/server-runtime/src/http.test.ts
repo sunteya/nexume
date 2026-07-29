@@ -153,7 +153,7 @@ describe("Server HTTP API", () => {
     expect(await response.json()).toEqual({
       error: {
         code: "setup_required",
-        message: "请先完成 Nexume 初始化。",
+        message: "Complete the Nexume setup before using this API.",
       },
     });
   });

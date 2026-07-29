@@ -36,7 +36,7 @@ export function createHttpInitializationClient(
   return {
     async getInitializationStatus() {
       const response = await fetch("/api/setup/status");
-      if (!response.ok) throw await responseError(response, "读取初始化状态失败。");
+      if (!response.ok) throw await responseError(response, "Unable to read the setup status.");
       return (await response.json()) as InitializationStatus;
     },
 
@@ -50,7 +50,7 @@ export function createHttpInitializationClient(
         body: JSON.stringify(input),
       });
       if (response.status === 401) onUnauthorized?.();
-      if (!response.ok) throw await responseError(response, "初始化 Nexume 失败。");
+      if (!response.ok) throw await responseError(response, "Unable to set up Nexume.");
       return (await response.json()) as InitializationStatus;
     },
   };
@@ -77,11 +77,11 @@ export function createHttpSessionClient(
 
       if (response.status === 401) {
         onUnauthorized();
-        throw new Error("访问令牌无效。");
+        throw new Error("The access token is invalid.");
       }
 
       if (!response.ok) {
-        throw await responseError(response, "读取 Session 失败。");
+        throw await responseError(response, "Unable to load sessions.");
       }
 
       return (await response.json()) as SessionBatch;
@@ -107,7 +107,7 @@ export function createHttpCollectorClient(
 
     if (response.status === 401) {
       onUnauthorized();
-      throw new Error("访问令牌无效。");
+      throw new Error("The access token is invalid.");
     }
 
     return response;
@@ -116,13 +116,13 @@ export function createHttpCollectorClient(
   return {
     async getRuntimeInfo() {
       const response = await request("/api/runtime");
-      if (!response.ok) throw await responseError(response, "读取运行信息失败。");
+      if (!response.ok) throw await responseError(response, "Unable to load runtime details.");
       return (await response.json()) as RuntimeInfo;
     },
 
     async list() {
       const response = await request("/api/collectors");
-      if (!response.ok) throw await responseError(response, "读取 Collector 失败。");
+      if (!response.ok) throw await responseError(response, "Unable to load collectors.");
       return ((await response.json()) as CollectorListResult).items;
     },
 
@@ -132,7 +132,7 @@ export function createHttpCollectorClient(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
       });
-      if (!response.ok) throw await responseError(response, "创建 Collector 失败。");
+      if (!response.ok) throw await responseError(response, "Unable to create the collector.");
       return (await response.json()) as CreateCollectorResult;
     },
 
@@ -142,7 +142,7 @@ export function createHttpCollectorClient(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
       });
-      if (!response.ok) throw await responseError(response, "修改 Collector 名称失败。");
+      if (!response.ok) throw await responseError(response, "Unable to rename the collector.");
       return (await response.json()) as ManagedCollectorInfo;
     },
 
@@ -150,7 +150,7 @@ export function createHttpCollectorClient(
       const response = await request(`/api/collectors/${encodeURIComponent(id)}`, {
         method: "DELETE",
       });
-      if (!response.ok) throw await responseError(response, "删除 Collector 失败。");
+      if (!response.ok) throw await responseError(response, "Unable to delete the collector.");
     },
 
     async sync(id: string) {
@@ -159,7 +159,7 @@ export function createHttpCollectorClient(
         { method: "POST" },
       );
       if (!response.ok) {
-        throw await responseError(response, "触发 Collector 同步失败。");
+        throw await responseError(response, "Unable to start collector sync.");
       }
     },
 
@@ -168,7 +168,7 @@ export function createHttpCollectorClient(
         `/api/collectors/${encodeURIComponent(id)}/token`,
       );
       if (!response.ok) {
-        throw await responseError(response, "读取 Collector token 失败。");
+        throw await responseError(response, "Unable to load the collector token.");
       }
       return (await response.json()) as CollectorTokenResult;
     },

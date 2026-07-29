@@ -267,6 +267,36 @@ select {
   gap: 12px;
 }
 
+.session-filter-toolbar {
+  display: flex;
+  min-height: 56px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 18px;
+  padding: 9px 20px;
+  border-bottom: 1px solid #dfe4e2;
+  background: #f7f8f8;
+}
+
+.session-filter-field {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: #58645f;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.session-filter-select {
+  width: 210px;
+}
+
+.session-filter-select .el-select__wrapper {
+  border-radius: 5px;
+}
+
 .table-region {
   min-height: 0;
   flex: 1 1 auto;
@@ -304,6 +334,16 @@ select {
 .session-title {
   color: #1f2926;
   font-weight: 570;
+}
+
+.table-region .el-table .el-tag {
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+.table-region .el-table .el-tag__content {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .updated-time {
@@ -507,8 +547,27 @@ select {
     padding-left: 12px;
   }
 
+  .session-filter-toolbar {
+    align-items: stretch;
+    gap: 8px;
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .session-filter-field {
+    flex: 1 1 0;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .session-filter-select {
+    width: 100%;
+  }
+
   .collector-table-region .el-table {
-    min-width: 980px;
+    width: 100%;
+    min-width: 0;
   }
 
   .desktop-runtime-bar {
@@ -610,6 +669,15 @@ html.dark .app-shell {
 html.dark .app-header {
   border-bottom-color: #323b38;
   background: #202725;
+}
+
+html.dark .session-filter-toolbar {
+  border-bottom-color: #323b38;
+  background: #181e1c;
+}
+
+html.dark .session-filter-field {
+  color: #aab4b0;
 }
 
 html.dark .server-nav-button:not(.is-disabled) {

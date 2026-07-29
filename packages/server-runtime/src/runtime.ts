@@ -2,12 +2,17 @@ import type {
   CollectorRuntimeMetadata,
   RuntimeInfo,
 } from "@nexume/contracts";
-import { createServerCore, type CollectorSource } from "@nexume/server-core";
+import {
+  CollectorSyncRunner,
+  type CollectorDataSource,
+} from "@nexume/collector-core";
+import { createServerCore } from "@nexume/server-core";
 import type { AppStorage } from "@nexume/storage";
 
 import { CollectorManagementService } from "./collector-management";
 import { createCollectorSocketServer } from "./collector-socket";
 import { createRequestHandler } from "./http";
+import { SessionSyncService } from "./session-sync";
 
 export interface StartServerRuntimeOptions {
   accessToken: string;
@@ -15,7 +20,7 @@ export interface StartServerRuntimeOptions {
   hostname: string;
   port: number;
   webRoot: string;
-  localSource: CollectorSource;
+  localSources: CollectorDataSource[];
   localMetadata: CollectorRuntimeMetadata;
   defaultLocalCollectorName: string;
   getRuntimeInfo?: (port: number) => RuntimeInfo;
@@ -23,12 +28,39 @@ export interface StartServerRuntimeOptions {
 }
 
 export function startServerRuntime(options: StartServerRuntimeOptions) {
-  const core = createServerCore();
+  const core = createServerCore({
+    sessions: {
+      list(query) {
+        const result = options.storage.sessions.list(query);
+        return {
+          ...result,
+          items: result.items.map((item) => ({
+            ...item,
+            collectorName:
+              options.storage.collectors.get(item.collectorId)?.name ??
+              item.collectorId,
+          })),
+        };
+      },
+    },
+  });
+  const sessionSync = new SessionSyncService(options.storage.sessionSync);
+  const localSync = new CollectorSyncRunner({
+    sources: options.localSources,
+    onError: (_agent, error) => options.onError?.(error),
+    target: {
+      begin: async (request) => sessionSync.begin("local", request),
+      commit: async (request) => sessionSync.commit("local", request),
+    },
+  });
   const collectors = new CollectorManagementService({
     collectors: options.storage.collectors,
     core,
-    localSource: options.localSource,
     localMetadata: options.localMetadata,
+    onLocalCollectorChanged(enabled) {
+      if (enabled) localSync.start();
+      else localSync.stop();
+    },
   });
 
   if (options.storage.initialization.getStatus().initialized) {
@@ -37,6 +69,7 @@ export function startServerRuntime(options: StartServerRuntimeOptions) {
 
   const collectorSockets = createCollectorSocketServer({
     core,
+    sessionSync,
     authenticate: (token) => collectors.authenticate(token),
     getCollector: (id) => collectors.getRemote(id),
     onConnected: (id, metadata) => collectors.connected(id, metadata),
@@ -45,6 +78,13 @@ export function startServerRuntime(options: StartServerRuntimeOptions) {
     onError: options.onError,
   });
   collectors.setRemoteDisconnect(collectorSockets.disconnectCollector);
+  collectors.setSyncTrigger((id) => {
+    if (id === "local") {
+      void localSync.syncNow();
+      return true;
+    }
+    return collectorSockets.syncCollector(id);
+  });
   const collectorSocketHandler = collectorSockets.engine.handler();
   let server: ReturnType<typeof Bun.serve>;
 
@@ -77,7 +117,7 @@ export function startServerRuntime(options: StartServerRuntimeOptions) {
     ...collectorSocketHandler,
     hostname: options.hostname,
     port: options.port,
-    maxRequestBodySize: 65_536,
+    maxRequestBodySize: 2 * 1024 * 1024,
     fetch(request, bunServer) {
       return new URL(request.url).pathname.startsWith("/socket.io/")
         ? collectorSocketHandler.fetch(request, bunServer)
@@ -103,6 +143,7 @@ export function startServerRuntime(options: StartServerRuntimeOptions) {
     close(): Promise<void> {
       if (closing) return closing;
       closing = Promise.resolve().then(async () => {
+        localSync.stop();
         await collectorSockets.close();
         await server.stop(true);
       });

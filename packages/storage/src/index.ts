@@ -8,6 +8,8 @@ import { InitializationService } from "./initialization";
 import { CollectorStore } from "./collector";
 import { SqliteMigrationStorage } from "./migration-storage";
 import { migrations, type MigrationContext } from "./migrations";
+import { SessionStore } from "./session";
+import { SessionSyncStore } from "./session-sync";
 
 export {
   AlreadyInitializedError,
@@ -22,6 +24,26 @@ export {
   type CollectorRuntime,
   type CreateCollectorInput,
 } from "./collector";
+export {
+  SessionStore,
+  type AgentId,
+  type ListSessionsOptions,
+  type SessionKey,
+  type SessionListCursor,
+  type SessionListResult,
+  type SessionRecord,
+  type SessionStatus,
+} from "./session";
+export {
+  SessionSyncStore,
+  type BeginSessionSyncInput,
+  type CommitSessionBatchInput,
+  type CommitSessionBatchResult,
+  type SessionSyncCheckpoint,
+  type SessionSyncItem,
+  type SessionSyncMode,
+  type SessionSyncState,
+} from "./session-sync";
 
 export interface OpenStorageOptions {
   dataDir: string;
@@ -34,6 +56,8 @@ export interface AppStorage {
   db: Database;
   initialization: InitializationService;
   collectors: CollectorStore;
+  sessions: SessionStore;
+  sessionSync: SessionSyncStore;
   close(): void;
 }
 
@@ -92,6 +116,8 @@ export async function openStorage(
     await runMigrations(context);
 
     const collectors = new CollectorStore(db);
+    const sessions = new SessionStore(db);
+    const sessionSync = new SessionSyncStore(db);
     return {
       dataDir,
       cacheDir,
@@ -99,6 +125,8 @@ export async function openStorage(
       db,
       initialization: new InitializationService(db),
       collectors,
+      sessions,
+      sessionSync,
       close: () => db.close(),
     };
   } catch (error) {

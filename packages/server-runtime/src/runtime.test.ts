@@ -34,7 +34,12 @@ describe("startServerRuntime", () => {
       hostname: "127.0.0.1",
       port: 0,
       webRoot,
-      localSource: { querySessions: () => ({ items: [], hasMore: false }) },
+      localSources: [{
+        agent: "opencode",
+        checkpointFormat: "opencode/test/v1",
+        available: false,
+        readSessionPage: () => ({ items: [], hasMore: false }),
+      }],
       localMetadata: {
         hostname: "runtime.local",
         version: "0.0.1",
@@ -72,8 +77,12 @@ describe("startServerRuntime", () => {
       headers: { ...authorization, "Content-Type": "application/json" },
       body: JSON.stringify({ name: "Remote", connectionType: "remote" }),
     });
-    const credential = (await created.json()) as { token: string };
+    const credential = (await created.json()) as {
+      token: string;
+      collector: { id: string };
+    };
 
+    let syncError: unknown;
     const connection = new CollectorConnection({
       serverUrl: origin,
       token: credential.token,
@@ -82,17 +91,28 @@ describe("startServerRuntime", () => {
         version: "0.0.1",
         agents: ["opencode"],
       },
-      source: {
+      sources: [{
+        agent: "opencode",
+        checkpointFormat: "opencode/test/v1",
         available: true,
-        querySessions: () => ({ items: [], hasMore: false }),
+        readSessionPage: () => ({ items: [], hasMore: false }),
+      }],
+      onSyncError(_agent, error) {
+        syncError = error;
       },
     });
     cleanups.push(() => connection.disconnect());
     connection.connect();
     await waitFor(() => runtime.core.listCollectors().length === 1);
     expect(runtime.core.listCollectors()[0]?.name).toBe("Remote");
+    await waitFor(() => {
+      if (syncError) throw syncError;
+      const state = storage.sessionSync.get(credential.collector.id, "opencode");
+      return state?.activeRunId === null;
+    });
 
     connection.disconnect();
+    await waitFor(() => runtime.core.listCollectors().length === 0);
     await runtime.close();
     await runtime.close();
     const replacement = Bun.serve({

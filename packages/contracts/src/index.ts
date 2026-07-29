@@ -1,43 +1,34 @@
 export const sessionBatchSizes = [20, 50, 100] as const;
+export const sessionStatuses = ["active", "archived", "deleted"] as const;
 
 export type SessionBatchSize = (typeof sessionBatchSizes)[number];
-export type AgentType = "opencode";
+export type SessionStatus = (typeof sessionStatuses)[number];
+export type AgentId = string;
 export type CollectorConnectionType = "local" | "remote";
+export type SessionSyncMode = "incremental" | "reconcile";
 
 export interface CollectedSessionSummary {
   id: string;
-  agent: AgentType;
+  agent: AgentId;
   title: string;
   directory: string;
   createdAt: number;
   updatedAt: number;
+  archivedAt?: number;
 }
 
 export interface SessionSummary extends CollectedSessionSummary {
   collectorId: string;
   collectorName: string;
-}
-
-export interface SessionPosition {
-  updatedAt: number;
-  agent: AgentType;
-  id: string;
-}
-
-export interface CollectorSessionQuery {
-  asOf: number;
-  limit: SessionBatchSize;
-  cursor?: SessionPosition;
-}
-
-export interface CollectorSessionBatch {
-  items: CollectedSessionSummary[];
-  hasMore: boolean;
+  deletedAt?: number;
 }
 
 export interface ListSessionsParams {
   limit: SessionBatchSize;
   cursor?: string;
+  collectorId?: string;
+  agent?: AgentId;
+  status?: SessionStatus;
 }
 
 export interface CollectorQueryWarning {
@@ -56,7 +47,7 @@ export interface SessionBatch {
 export interface CollectorRuntimeMetadata {
   hostname: string;
   version: string;
-  agents: AgentType[];
+  agents: AgentId[];
 }
 
 export interface CollectorDescriptor extends CollectorRuntimeMetadata {
@@ -82,7 +73,7 @@ export interface ManagedCollectorInfo {
   online: boolean;
   hostname?: string;
   version?: string;
-  agents: AgentType[];
+  agents: AgentId[];
   connectedAt?: number;
   lastSeenAt?: number;
   createdAt: number;
@@ -127,24 +118,66 @@ export interface InitializationStatus {
   initializedAt?: number;
 }
 
-export interface CollectorQueryError {
+export interface SessionSyncCheckpoint {
+  format: string;
+  value: string;
+}
+
+export interface BeginSessionSyncRequest {
+  agent: AgentId;
+  checkpointFormat: string;
+  forceReconcile?: boolean;
+}
+
+export interface BeginSessionSyncResult {
+  runId: string;
+  mode: SessionSyncMode;
+  checkpoint?: SessionSyncCheckpoint;
+  batchSize: number;
+}
+
+export interface SessionSyncBatchRequest {
+  agent: AgentId;
+  runId: string;
+  sequence: number;
+  items: CollectedSessionSummary[];
+  checkpoint?: SessionSyncCheckpoint;
+  complete: boolean;
+}
+
+export interface SessionSyncBatchResult {
+  duplicate: boolean;
+  upserted: number;
+  deleted: number;
+}
+
+export interface CollectorProtocolError {
   code: string;
   message: string;
 }
 
-export type CollectorQueryResponse =
-  | { ok: true; data: CollectorSessionBatch }
-  | { ok: false; error: CollectorQueryError };
+export type BeginSessionSyncResponse =
+  | { ok: true; data: BeginSessionSyncResult }
+  | { ok: false; error: CollectorProtocolError };
+
+export type SessionSyncBatchResponse =
+  | { ok: true; data: SessionSyncBatchResult }
+  | { ok: false; error: CollectorProtocolError };
 
 export interface ServerToCollectorEvents {
-  "sessions:list": (
-    query: CollectorSessionQuery,
-    acknowledge: (response: CollectorQueryResponse) => void,
-  ) => void;
+  "sessions:sync:request": () => void;
 }
 
 export interface CollectorToServerEvents {
   "collector:status": (status: CollectorStatus) => void;
+  "sessions:sync:begin": (
+    request: BeginSessionSyncRequest,
+    acknowledge: (response: BeginSessionSyncResponse) => void,
+  ) => void;
+  "sessions:sync:batch": (
+    request: SessionSyncBatchRequest,
+    acknowledge: (response: SessionSyncBatchResponse) => void,
+  ) => void;
 }
 
 export interface InterServerEvents {}
@@ -153,37 +186,134 @@ export interface CollectorSocketData {
   collectorId: string;
 }
 
+export function assertAgentId(value: unknown): asserts value is AgentId {
+  if (
+    typeof value !== "string" ||
+    !/^[a-z][a-z0-9-]{0,63}$/.test(value)
+  ) {
+    throw new Error("Agent ID 无效。");
+  }
+}
+
 export function assertListSessionsParams(
   params: ListSessionsParams,
 ): asserts params is ListSessionsParams {
   if (!sessionBatchSizes.includes(params.limit)) {
     throw new Error("Session 每批数量无效。");
   }
-
   if (params.cursor !== undefined && params.cursor.length === 0) {
     throw new Error("Session 游标无效。");
   }
+  if (params.collectorId !== undefined && !params.collectorId.trim()) {
+    throw new Error("Collector ID 无效。");
+  }
+  if (params.agent !== undefined) assertAgentId(params.agent);
+  if (
+    params.status !== undefined &&
+    !sessionStatuses.includes(params.status)
+  ) {
+    throw new Error("Session 状态无效。");
+  }
 }
 
-export function assertCollectorSessionQuery(
-  query: CollectorSessionQuery,
-): asserts query is CollectorSessionQuery {
-  if (!Number.isSafeInteger(query.asOf) || query.asOf < 0) {
-    throw new Error("Session 查询时间无效。");
+function assertSafeTimestamp(value: unknown, field: string): void {
+  if (!Number.isSafeInteger(value) || (value as number) < 0) {
+    throw new Error(`${field} 无效。`);
   }
+}
 
-  if (!sessionBatchSizes.includes(query.limit)) {
-    throw new Error("Session 每批数量无效。");
+export function assertCollectedSessionSummary(
+  value: unknown,
+  expectedAgent?: AgentId,
+): asserts value is CollectedSessionSummary {
+  if (!value || typeof value !== "object") {
+    throw new Error("Session 数据无效。");
   }
+  const session = value as Partial<CollectedSessionSummary>;
+  if (
+    typeof session.id !== "string" ||
+    !session.id ||
+    session.id.length > 512 ||
+    typeof session.title !== "string" ||
+    session.title.length > 4096 ||
+    typeof session.directory !== "string" ||
+    session.directory.length > 8192
+  ) {
+    throw new Error("Session 数据不完整。");
+  }
+  assertAgentId(session.agent);
+  if (expectedAgent !== undefined && session.agent !== expectedAgent) {
+    throw new Error("Session Agent 与同步任务不一致。");
+  }
+  assertSafeTimestamp(session.createdAt, "Session 创建时间");
+  assertSafeTimestamp(session.updatedAt, "Session 更新时间");
+  if (session.archivedAt !== undefined) {
+    assertSafeTimestamp(session.archivedAt, "Session 归档时间");
+  }
+}
 
-  if (query.cursor) {
-    if (!Number.isSafeInteger(query.cursor.updatedAt)) {
-      throw new Error("Session 游标时间无效。");
-    }
+export function assertSessionSyncCheckpoint(
+  value: unknown,
+): asserts value is SessionSyncCheckpoint {
+  if (!value || typeof value !== "object") {
+    throw new Error("同步 checkpoint 无效。");
+  }
+  const checkpoint = value as Partial<SessionSyncCheckpoint>;
+  if (
+    typeof checkpoint.format !== "string" ||
+    !checkpoint.format ||
+    checkpoint.format.length > 128 ||
+    typeof checkpoint.value !== "string" ||
+    checkpoint.value.length > 65_536
+  ) {
+    throw new Error("同步 checkpoint 无效。");
+  }
+}
 
-    if (!query.cursor.id || query.cursor.agent !== "opencode") {
-      throw new Error("Session 游标内容无效。");
-    }
+export function assertBeginSessionSyncRequest(
+  value: unknown,
+): asserts value is BeginSessionSyncRequest {
+  if (!value || typeof value !== "object") {
+    throw new Error("同步开始参数无效。");
+  }
+  const request = value as Partial<BeginSessionSyncRequest>;
+  assertAgentId(request.agent);
+  if (
+    typeof request.checkpointFormat !== "string" ||
+    !request.checkpointFormat ||
+    request.checkpointFormat.length > 128 ||
+    (request.forceReconcile !== undefined &&
+      typeof request.forceReconcile !== "boolean")
+  ) {
+    throw new Error("同步开始参数无效。");
+  }
+}
+
+export function assertSessionSyncBatchRequest(
+  value: unknown,
+): asserts value is SessionSyncBatchRequest {
+  if (!value || typeof value !== "object") {
+    throw new Error("同步批次无效。");
+  }
+  const request = value as Partial<SessionSyncBatchRequest>;
+  assertAgentId(request.agent);
+  if (
+    typeof request.runId !== "string" ||
+    !request.runId ||
+    request.runId.length > 128 ||
+    !Number.isSafeInteger(request.sequence) ||
+    (request.sequence as number) < 0 ||
+    typeof request.complete !== "boolean" ||
+    !Array.isArray(request.items) ||
+    request.items.length > 500
+  ) {
+    throw new Error("同步批次无效。");
+  }
+  for (const item of request.items) {
+    assertCollectedSessionSummary(item, request.agent);
+  }
+  if (request.checkpoint !== undefined) {
+    assertSessionSyncCheckpoint(request.checkpoint);
   }
 }
 
@@ -193,7 +323,6 @@ export function assertCollectorDescriptor(
   if (!value || typeof value !== "object") {
     throw new Error("Collector 信息无效。");
   }
-
   const descriptor = value as Partial<CollectorDescriptor>;
   const strings = [
     descriptor.id,
@@ -201,7 +330,6 @@ export function assertCollectorDescriptor(
     descriptor.hostname,
     descriptor.version,
   ];
-
   if (
     strings.some(
       (item) => typeof item !== "string" || !item.trim() || item.length > 128,
@@ -209,13 +337,18 @@ export function assertCollectorDescriptor(
   ) {
     throw new Error("Collector 信息不完整。");
   }
+  assertAgentList(descriptor.agents);
+}
 
-  if (
-    !Array.isArray(descriptor.agents) ||
-    descriptor.agents.length === 0 ||
-    descriptor.agents.some((agent) => agent !== "opencode")
-  ) {
+function assertAgentList(value: unknown): asserts value is AgentId[] {
+  if (!Array.isArray(value) || value.length === 0) {
     throw new Error("Collector Agent 列表无效。");
+  }
+  const unique = new Set<string>();
+  for (const agent of value) {
+    assertAgentId(agent);
+    if (unique.has(agent)) throw new Error("Collector Agent 列表重复。");
+    unique.add(agent);
   }
 }
 
@@ -225,7 +358,6 @@ export function assertCollectorRuntimeMetadata(
   if (!value || typeof value !== "object") {
     throw new Error("Collector runtime metadata 无效。");
   }
-
   const metadata = value as Partial<CollectorRuntimeMetadata>;
   if (
     Object.keys(metadata).some(
@@ -234,23 +366,14 @@ export function assertCollectorRuntimeMetadata(
   ) {
     throw new Error("Collector runtime metadata 字段无效。");
   }
-
-  const strings = [metadata.hostname, metadata.version];
   if (
-    strings.some(
+    [metadata.hostname, metadata.version].some(
       (item) => typeof item !== "string" || !item.trim() || item.length > 128,
     )
   ) {
     throw new Error("Collector runtime metadata 不完整。");
   }
-
-  if (
-    !Array.isArray(metadata.agents) ||
-    metadata.agents.length === 0 ||
-    metadata.agents.some((agent) => agent !== "opencode")
-  ) {
-    throw new Error("Collector Agent 列表无效。");
-  }
+  assertAgentList(metadata.agents);
 }
 
 export function assertCollectorSocketAuth(
@@ -259,16 +382,13 @@ export function assertCollectorSocketAuth(
   if (!value || typeof value !== "object") {
     throw new Error("Collector Socket auth 无效。");
   }
-
   const auth = value as Partial<CollectorSocketAuth>;
   if (Object.keys(auth).some((key) => !["token", "metadata"].includes(key))) {
     throw new Error("Collector Socket auth 字段无效。");
   }
-
   if (typeof auth.token !== "string" || !auth.token.trim()) {
     throw new Error("Collector Socket token 无效。");
   }
-
   assertCollectorRuntimeMetadata(auth.metadata);
 }
 
@@ -284,7 +404,6 @@ export function assertCreateCollectorInput(
   if (!value || typeof value !== "object") {
     throw new Error("Collector 创建参数无效。");
   }
-
   const input = value as Partial<CreateCollectorInput>;
   assertCollectorName(input.name);
   if (input.connectionType !== "local" && input.connectionType !== "remote") {

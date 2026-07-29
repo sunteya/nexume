@@ -1,11 +1,13 @@
 import type { Database } from "bun:sqlite";
 
-import type { AgentType, CollectorConnectionType } from "@nexume/contracts";
+import type { CollectorConnectionType } from "@nexume/contracts";
+
+import type { AgentId } from "./session";
 
 export interface CollectorRuntime {
   hostname: string | null;
   version: string | null;
-  agents: AgentType[] | null;
+  agents: AgentId[] | null;
   connectedAt: number | null;
   lastSeenAt: number | null;
 }
@@ -40,13 +42,13 @@ interface CollectorRow {
   updated_at: number;
 }
 
-function cloneAgents(agents: AgentType[] | null): AgentType[] | null {
+function cloneAgents(agents: AgentId[] | null): AgentId[] | null {
   return agents ? [...agents] : null;
 }
 
 function fromRow(row: CollectorRow): CollectorRecord {
   const agents = row.agents
-    ? (JSON.parse(row.agents) as AgentType[])
+    ? (JSON.parse(row.agents) as AgentId[])
     : null;
 
   return {

@@ -1,21 +1,16 @@
 import { io, type Socket } from "socket.io-client";
 
-import {
-  assertCollectorSessionQuery,
-  type CollectorSessionBatch,
-  type CollectorSessionQuery,
-  type CollectorRuntimeMetadata,
-  type CollectorSocketAuth,
-  type CollectorToServerEvents,
-  type ServerToCollectorEvents,
+import type {
+  BeginSessionSyncResponse,
+  CollectorRuntimeMetadata,
+  CollectorSocketAuth,
+  CollectorToServerEvents,
+  ServerToCollectorEvents,
+  SessionSyncBatchResponse,
 } from "@nexume/contracts";
 
-export interface CollectorDataSource {
-  readonly available: boolean;
-  querySessions(
-    query: CollectorSessionQuery,
-  ): CollectorSessionBatch | Promise<CollectorSessionBatch>;
-}
+import type { CollectorDataSource } from "./source";
+import { CollectorSyncRunner } from "./sync-runner";
 
 export type CollectorConnectionState =
   | "disconnected"
@@ -26,21 +21,37 @@ export interface CollectorConnectionOptions {
   serverUrl: string;
   token: string;
   metadata: CollectorRuntimeMetadata;
-  source: CollectorDataSource;
+  sources: CollectorDataSource[];
+  syncIntervalMs?: number;
   onStateChange?: (state: CollectorConnectionState, detail?: string) => void;
+  onSyncError?: (agent: string, error: unknown) => void;
 }
 
 type CollectorSocket = Socket<ServerToCollectorEvents, CollectorToServerEvents>;
 
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+function responseData<T>(
+  response: { ok: true; data: T } | { ok: false; error: { message: string } },
+): T {
+  if (!response?.ok) throw new Error(response?.error.message ?? "Server 返回无效响应。");
+  return response.data;
 }
 
 export class CollectorConnection {
   readonly socket: CollectorSocket;
   private heartbeat?: ReturnType<typeof setInterval>;
+  private readonly runner: CollectorSyncRunner;
 
   constructor(private readonly options: CollectorConnectionOptions) {
+    const sourceAgents = new Set<string>();
+    for (const source of options.sources) {
+      if (!options.metadata.agents.includes(source.agent)) {
+        throw new Error(`Collector metadata 未声明 ${source.agent} Agent。`);
+      }
+      if (sourceAgents.has(source.agent)) {
+        throw new Error(`Collector 包含重复的 ${source.agent} Agent 数据源。`);
+      }
+      sourceAgents.add(source.agent);
+    }
     const serverUrl = options.serverUrl.replace(/\/$/, "");
     const auth: CollectorSocketAuth = {
       token: options.token,
@@ -54,35 +65,41 @@ export class CollectorConnection {
       reconnectionDelayMax: 30_000,
       auth,
     });
+    this.runner = new CollectorSyncRunner({
+      sources: options.sources,
+      intervalMs: options.syncIntervalMs,
+      onError: options.onSyncError,
+      target: {
+        begin: async (request) => {
+          const response = await this.socket
+            .timeout(10_000)
+            .emitWithAck("sessions:sync:begin", request) as BeginSessionSyncResponse;
+          return responseData(response);
+        },
+        commit: async (request) => {
+          const response = await this.socket
+            .timeout(10_000)
+            .emitWithAck("sessions:sync:batch", request) as SessionSyncBatchResponse;
+          return responseData(response);
+        },
+      },
+    });
 
     this.socket.on("connect", () => {
       options.onStateChange?.("connected");
       this.sendStatus();
       this.heartbeat = setInterval(() => this.sendStatus(), 30_000);
+      this.runner.start();
     });
     this.socket.on("disconnect", (reason) => {
-      this.clearHeartbeat();
+      this.clearTimers();
       options.onStateChange?.("disconnected", reason);
     });
     this.socket.on("connect_error", (error) => {
       options.onStateChange?.("disconnected", error.message);
     });
-    this.socket.on("sessions:list", async (query, acknowledge) => {
-      try {
-        assertCollectorSessionQuery(query);
-        acknowledge({
-          ok: true,
-          data: await options.source.querySessions(query),
-        });
-      } catch (error) {
-        acknowledge({
-          ok: false,
-          error: {
-            code: "collector_query_failed",
-            message: getErrorMessage(error),
-          },
-        });
-      }
+    this.socket.on("sessions:sync:request", () => {
+      void this.runner.syncNow();
     });
   }
 
@@ -93,18 +110,19 @@ export class CollectorConnection {
   }
 
   disconnect(): void {
-    this.clearHeartbeat();
+    this.clearTimers();
     this.socket.disconnect();
   }
 
   private sendStatus(): void {
     this.socket.emit("collector:status", {
-      available: this.options.source.available,
+      available: this.options.sources.some((source) => source.available),
     });
   }
 
-  private clearHeartbeat(): void {
+  private clearTimers(): void {
     if (this.heartbeat) clearInterval(this.heartbeat);
     this.heartbeat = undefined;
+    this.runner.stop();
   }
 }

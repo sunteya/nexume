@@ -9,7 +9,6 @@ import {
 } from "@nexume/contracts";
 import type {
   CollectorRegistration,
-  CollectorSource,
   ServerCore,
 } from "@nexume/server-core";
 import type { CollectorRecord, CollectorStore } from "@nexume/storage";
@@ -28,8 +27,8 @@ export class CollectorManagementError extends Error {
 export interface CollectorManagementOptions {
   collectors: CollectorStore;
   core: ServerCore;
-  localSource: CollectorSource;
   localMetadata: CollectorRuntimeMetadata;
+  onLocalCollectorChanged?: (enabled: boolean) => void;
 }
 
 function collectorIdFromToken(token: string): string | undefined {
@@ -68,11 +67,16 @@ function managedInfo(
 export class CollectorManagementService {
   private localRegistration?: CollectorRegistration;
   private disconnectRemote: (id: string) => void = () => {};
+  private triggerSync: (id: string) => boolean = () => false;
 
   constructor(private readonly options: CollectorManagementOptions) {}
 
   setRemoteDisconnect(disconnect: (id: string) => void): void {
     this.disconnectRemote = disconnect;
+  }
+
+  setSyncTrigger(trigger: (id: string) => boolean): void {
+    this.triggerSync = trigger;
   }
 
   syncLocalCollector(): void {
@@ -89,13 +93,13 @@ export class CollectorManagementService {
         ...this.options.localMetadata,
       },
       connectionType: "local",
-      source: this.options.localSource,
     });
     this.options.collectors.updateRuntime(record.id, {
       ...this.options.localMetadata,
       connectedAt: now,
       lastSeenAt: now,
     });
+    this.options.onLocalCollectorChanged?.(true);
   }
 
   list(): ManagedCollectorInfo[] {
@@ -173,6 +177,7 @@ export class CollectorManagementService {
     if (record.connectionType === "local") {
       this.localRegistration?.unregister();
       this.localRegistration = undefined;
+      this.options.onLocalCollectorChanged?.(false);
     } else {
       this.disconnectRemote(id);
     }
@@ -198,6 +203,17 @@ export class CollectorManagementService {
       );
     }
     return token;
+  }
+
+  sync(id: string): void {
+    if (!this.options.collectors.get(id)) throw this.notFound();
+    if (!this.triggerSync(id)) {
+      throw new CollectorManagementError(
+        "collector_offline",
+        "Collector 当前离线，无法立即同步。",
+        409,
+      );
+    }
   }
 
   authenticate(token: string): Pick<CollectorRecord, "id" | "name"> | undefined {

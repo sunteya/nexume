@@ -24,6 +24,7 @@ import {
   Clipboard,
   Copy,
   KeyRound,
+  List,
   Pencil,
   Plus,
   RefreshCw,
@@ -50,6 +51,10 @@ const props = withDefaults(
   { allowRemoteCollectors: true },
 );
 
+const emit = defineEmits<{
+  "view-sessions": [collectorId: string];
+}>();
+
 const dialogTransition: DialogTransition = { css: false };
 
 const collectors = ref<ManagedCollectorInfo[]>([]);
@@ -67,6 +72,7 @@ const tokenDialog = ref(false);
 const tokenValue = ref("");
 const tokenTitle = ref("Collector token");
 const tokenLoading = ref(false);
+const syncingCollectorIds = ref(new Set<string>());
 const showTokenAfterCreate = ref(false);
 const runtimeInfo = ref<RuntimeInfo>();
 
@@ -228,7 +234,7 @@ async function renameCollector(): Promise<void> {
 async function deleteCollector(collector: ManagedCollectorInfo): Promise<void> {
   try {
     await ElMessageBox.confirm(
-      `确定删除 Collector “${collector.name}”吗？已保存的连接信息也会被移除。`,
+      `确定删除 Collector “${collector.name}”吗？连接信息和已缓存的 Session 都会被移除。`,
       "删除 Collector",
       {
         type: "warning",
@@ -260,6 +266,20 @@ async function showToken(collector: ManagedCollectorInfo): Promise<void> {
     ElMessage.error(errorText(error, "读取 Collector token 失败。"));
   } finally {
     tokenLoading.value = false;
+  }
+}
+
+async function syncCollector(collector: ManagedCollectorInfo): Promise<void> {
+  syncingCollectorIds.value = new Set(syncingCollectorIds.value).add(collector.id);
+  try {
+    await props.client.sync(collector.id);
+    ElMessage.success(`已触发 ${collector.name} 同步。`);
+  } catch (error) {
+    ElMessage.error(errorText(error, "触发 Collector 同步失败。"));
+  } finally {
+    const next = new Set(syncingCollectorIds.value);
+    next.delete(collector.id);
+    syncingCollectorIds.value = next;
   }
 }
 
@@ -430,9 +450,32 @@ onMounted(() => void loadCollectors());
             </template>
           </el-table-column>
 
-          <el-table-column label="" width="136" fixed="right" align="right">
+          <el-table-column label="" width="198" fixed="right" align="right">
             <template #default="{ row }">
               <div class="collector-row-actions">
+                <el-tooltip content="查看 Sessions" placement="top">
+                  <el-button
+                    link
+                    aria-label="查看 Sessions"
+                    @click="emit('view-sessions', row.id)"
+                  >
+                    <list :size="15" :stroke-width="1.8" />
+                  </el-button>
+                </el-tooltip>
+                <el-tooltip content="立即同步" placement="top">
+                  <el-button
+                    link
+                    :loading="syncingCollectorIds.has(row.id)"
+                    aria-label="立即同步"
+                    @click="syncCollector(asCollector(row))"
+                  >
+                    <refresh-cw
+                      v-if="!syncingCollectorIds.has(row.id)"
+                      :size="15"
+                      :stroke-width="1.8"
+                    />
+                  </el-button>
+                </el-tooltip>
                 <el-tooltip content="修改名称" placement="top">
                   <el-button
                     link

@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import {
-  CollectorQueryFailedError,
-  type ServerCore,
-} from "@nexume/server-core";
+import type { ServerCore } from "@nexume/server-core";
 import { AlreadyInitializedError } from "@nexume/storage";
 
 import { createRequestHandler } from "./http";
@@ -171,13 +168,22 @@ describe("Server HTTP API", () => {
       }),
     });
     const response = await handler(
-      new Request("http://localhost/api/sessions?limit=20&cursor=opaque", {
+      new Request(
+        "http://localhost/api/sessions?limit=20&cursor=opaque&collectorId=collector-a&agent=codex&status=archived",
+        {
         headers: authorization,
-      }),
+        },
+      ),
     );
 
     expect(response.status).toBe(200);
-    expect(received).toEqual({ limit: 20, cursor: "opaque" });
+    expect(received).toEqual({
+      limit: 20,
+      cursor: "opaque",
+      collectorId: "collector-a",
+      agent: "codex",
+      status: "archived",
+    });
   });
 
   test("rejects an invalid batch size", async () => {
@@ -189,34 +195,6 @@ describe("Server HTTP API", () => {
     );
 
     expect(response.status).toBe(400);
-  });
-
-  test("maps unavailable Collectors to 503", async () => {
-    const handler = createRequestHandler({
-      accessToken: token,
-      core: createCore(() => {
-        throw new CollectorQueryFailedError([
-          {
-            collectorId: "local",
-            collectorName: "Local",
-            message: "OpenCode unavailable",
-          },
-        ]);
-      }),
-    });
-    const response = await handler(
-      new Request("http://localhost/api/sessions", {
-        headers: authorization,
-      }),
-    );
-
-    expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({
-      error: {
-        code: "collector_unavailable",
-        message: "当前没有 Collector 能够完成 Session 查询。",
-      },
-    });
   });
 
   test("returns the managed Collector list", async () => {
@@ -240,6 +218,7 @@ describe("Server HTTP API", () => {
         create: () => { throw new Error("not implemented"); },
         rename: () => { throw new Error("not implemented"); },
         delete: () => { throw new Error("not implemented"); },
+        sync: () => { throw new Error("not implemented"); },
         revealToken: () => { throw new Error("not implemented"); },
       },
     });
@@ -282,6 +261,9 @@ describe("Server HTTP API", () => {
         delete: (id) => {
           calls.push(`delete:${id}`);
         },
+        sync: (id) => {
+          calls.push(`sync:${id}`);
+        },
         revealToken: (id) => {
           calls.push(`token:${id}`);
           return "collector-token";
@@ -318,6 +300,15 @@ describe("Server HTTP API", () => {
     expect(await tokenResponse.json()).toEqual({ token: "collector-token" });
     expect(tokenResponse.headers.get("cache-control")).toBe("no-store");
 
+    const synced = await handler(
+      new Request("http://localhost/api/collectors/remote-1/sync", {
+        method: "POST",
+        headers: authorization,
+      }),
+    );
+    expect(synced.status).toBe(202);
+    expect(await synced.json()).toEqual({ accepted: true });
+
     const deleted = await handler(
       new Request("http://localhost/api/collectors/remote-1", {
         method: "DELETE",
@@ -329,6 +320,7 @@ describe("Server HTTP API", () => {
       "create:Remote",
       "rename:remote-1:Renamed",
       "token:remote-1",
+      "sync:remote-1",
       "delete:remote-1",
     ]);
   });

@@ -1,9 +1,7 @@
 import { Server as BunEngine } from "@socket.io/bun-engine";
 import {
   assertCollectorSocketAuth,
-  type CollectorQueryResponse,
   type CollectorRuntimeMetadata,
-  type CollectorSessionBatch,
   type CollectorSocketData,
   type CollectorToServerEvents,
   type InterServerEvents,
@@ -15,14 +13,16 @@ import {
 } from "@nexume/server-core";
 import { Server as SocketIOServer, type Socket } from "socket.io";
 
+import { SessionSyncService } from "./session-sync";
+
 export interface CollectorSocketServerOptions {
   core: ServerCore;
+  sessionSync: SessionSyncService;
   authenticate(token: string): { id: string; name: string } | undefined;
   getCollector(id: string): { id: string; name: string } | undefined;
   onConnected?: (id: string, metadata: CollectorRuntimeMetadata) => void;
   onTouched?: (id: string) => void;
   isInitialized?: () => boolean;
-  queryTimeout?: number;
   onError?: (error: unknown) => void;
 }
 
@@ -33,35 +33,14 @@ type CollectorServerSocket = Socket<
   CollectorSocketData
 >;
 
-function getQueryResult(
-  response: CollectorQueryResponse,
-  limit: number,
-): CollectorSessionBatch {
-  if (!response || typeof response !== "object") {
-    throw new Error("Collector 返回了无效响应。");
-  }
-  if (!response.ok) throw new Error(response.error.message);
-
-  if (
-    !response.data ||
-    !Array.isArray(response.data.items) ||
-    typeof response.data.hasMore !== "boolean" ||
-    response.data.items.length > limit ||
-    response.data.items.some(
-      (item) =>
-        !item ||
-        typeof item.id !== "string" ||
-        item.agent !== "opencode" ||
-        typeof item.title !== "string" ||
-        typeof item.directory !== "string" ||
-        !Number.isSafeInteger(item.createdAt) ||
-        !Number.isSafeInteger(item.updatedAt),
-    )
-  ) {
-    throw new Error("Collector 返回了无效 Session 数据。");
-  }
-
-  return response.data;
+function protocolError(error: unknown) {
+  return {
+    ok: false as const,
+    error: {
+      code: "session_sync_failed",
+      message: error instanceof Error ? error.message : String(error),
+    },
+  };
 }
 
 export function createCollectorSocketServer(
@@ -77,19 +56,14 @@ export function createCollectorSocketServer(
   const sockets = new Map<string, CollectorServerSocket>();
 
   io.bind(engine);
-
   io.use((socket, next) => {
     try {
       if (options.isInitialized && !options.isInitialized()) {
         throw new Error("请先完成 Nexume 初始化。");
       }
-
       assertCollectorSocketAuth(socket.handshake.auth);
       const collector = options.authenticate(socket.handshake.auth.token);
-      if (!collector) {
-        throw new Error("Collector 连接凭证无效。");
-      }
-
+      if (!collector) throw new Error("Collector 连接凭证无效。");
       socket.data.collectorId = collector.id;
       next();
     } catch (error) {
@@ -105,24 +79,12 @@ export function createCollectorSocketServer(
       return;
     }
 
-    const descriptor = { ...collector, ...metadata };
     const existing = sockets.get(collector.id);
     if (existing && existing.id !== socket.id) existing.disconnect(true);
-
     try {
       const registration = options.core.registerCollector({
-        descriptor,
+        descriptor: { ...collector, ...metadata },
         connectionType: "remote",
-        source: {
-          async querySessions(query) {
-            const response = await socket
-              .timeout(options.queryTimeout ?? 10_000)
-              .emitWithAck("sessions:list", query);
-            const result = getQueryResult(response, query.limit);
-            options.onTouched?.(collector.id);
-            return result;
-          },
-        },
       });
       sockets.set(collector.id, socket);
       options.onConnected?.(collector.id, metadata);
@@ -131,6 +93,32 @@ export function createCollectorSocketServer(
         registration.touch();
         options.onTouched?.(collector.id);
       });
+      socket.on("sessions:sync:begin", (request, acknowledge) => {
+        try {
+          if (!metadata.agents.includes(request.agent)) {
+            throw new Error("Collector 未声明该 Agent 数据源。");
+          }
+          const data = options.sessionSync.begin(collector.id, request);
+          registration.touch();
+          options.onTouched?.(collector.id);
+          acknowledge({ ok: true, data });
+        } catch (error) {
+          acknowledge(protocolError(error));
+        }
+      });
+      socket.on("sessions:sync:batch", (request, acknowledge) => {
+        try {
+          if (!metadata.agents.includes(request.agent)) {
+            throw new Error("Collector 未声明该 Agent 数据源。");
+          }
+          const data = options.sessionSync.commit(collector.id, request);
+          registration.touch();
+          options.onTouched?.(collector.id);
+          acknowledge({ ok: true, data });
+        } catch (error) {
+          acknowledge(protocolError(error));
+        }
+      });
       socket.on("disconnect", () => {
         if (sockets.get(collector.id)?.id === socket.id) {
           sockets.delete(collector.id);
@@ -138,9 +126,7 @@ export function createCollectorSocketServer(
         registration.unregister();
       });
     } catch (error) {
-      if (!(error instanceof CollectorRegistrationError)) {
-        options.onError?.(error);
-      }
+      if (!(error instanceof CollectorRegistrationError)) options.onError?.(error);
       socket.disconnect(true);
     }
   });
@@ -151,13 +137,16 @@ export function createCollectorSocketServer(
     disconnectCollector(id: string) {
       sockets.get(id)?.disconnect(true);
     },
-    close(): Promise<void> {
-      return new Promise((resolve) => {
-        io.close(() => {
-          engine.close();
-          resolve();
-        });
-      });
+    syncCollector(id: string): boolean {
+      const socket = sockets.get(id);
+      if (!socket?.connected) return false;
+      socket.emit("sessions:sync:request");
+      return true;
+    },
+    async close(): Promise<void> {
+      io.disconnectSockets(true);
+      io.close();
+      engine.close();
     },
   };
 }

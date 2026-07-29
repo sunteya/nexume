@@ -4,6 +4,8 @@ import {
   ElButton,
   ElConfigProvider,
   ElEmpty,
+  ElOption,
+  ElSelect,
   ElTable,
   ElTableColumn,
   ElTag,
@@ -12,24 +14,31 @@ import {
 } from "element-plus";
 import zhCn from "element-plus/es/locale/lang/zh-cn";
 import { ChevronDown, RefreshCw } from "lucide-vue-next";
-import { computed, nextTick, onMounted, ref } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 
 import type {
   CollectorQueryWarning,
+  ManagedCollectorInfo,
   SessionSummary,
 } from "@nexume/contracts";
 
-import type { SessionClient } from "./client";
+import type { CollectorClient, SessionClient } from "./client";
 
 const props = withDefaults(
   defineProps<{
     client: SessionClient;
+    collectorClient: CollectorClient;
+    initialCollectorId?: string;
     sourceLabel?: string;
   }>(),
   {
     sourceLabel: "本机",
   },
 );
+
+const emit = defineEmits<{
+  "collector-change": [collectorId: string];
+}>();
 
 const dateFormatter = new Intl.DateTimeFormat("zh-CN", {
   year: "numeric",
@@ -44,13 +53,19 @@ const relativeTimeFormatter = new Intl.RelativeTimeFormat("zh-CN", {
 });
 
 const sessions = ref<SessionSummary[]>([]);
+const collectors = ref<ManagedCollectorInfo[]>([]);
+const selectedCollectorId = ref(props.initialCollectorId ?? "");
+const selectedAgent = ref("");
 const nextCursor = ref<string>();
 const hasMore = ref(false);
 const warnings = ref<CollectorQueryWarning[]>([]);
 const loading = ref(false);
+const collectorsLoading = ref(false);
 const errorMessage = ref("");
+const collectorsErrorMessage = ref("");
 const table = ref<TableInstance>();
 let latestRequest = 0;
+let mounted = false;
 
 const resultSummary = computed(() =>
   sessions.value.length === 0
@@ -62,6 +77,16 @@ const warningMessage = computed(() =>
     .map((warning) => `${warning.collectorName}：${warning.message}`)
     .join("；"),
 );
+const agentOptions = computed(() => {
+  const availableCollectors = selectedCollectorId.value
+    ? collectors.value.filter(
+        (collector) => collector.id === selectedCollectorId.value,
+      )
+    : collectors.value;
+
+  return [...new Set(availableCollectors.flatMap((collector) => collector.agents))]
+    .sort((left, right) => left.localeCompare(right, "zh-CN"));
+});
 
 function getProjectName(directory: string): string {
   return directory.split(/[\\/]/).filter(Boolean).at(-1) ?? directory;
@@ -102,7 +127,7 @@ function formatRelativeTime(timestamp: number): string {
 }
 
 async function loadSessions(append = false): Promise<void> {
-  if (loading.value || (append && !hasMore.value)) return;
+  if (append && (loading.value || !hasMore.value)) return;
 
   const requestId = ++latestRequest;
   loading.value = true;
@@ -112,6 +137,8 @@ async function loadSessions(append = false): Promise<void> {
     const result = await props.client.listSessions({
       limit: 50,
       cursor: append ? nextCursor.value : undefined,
+      collectorId: selectedCollectorId.value || undefined,
+      agent: selectedAgent.value || undefined,
     });
 
     if (requestId !== latestRequest) return;
@@ -146,7 +173,57 @@ async function loadSessions(append = false): Promise<void> {
   }
 }
 
-onMounted(() => void loadSessions());
+async function loadCollectors(): Promise<void> {
+  if (collectorsLoading.value) return;
+
+  collectorsLoading.value = true;
+  collectorsErrorMessage.value = "";
+  try {
+    collectors.value = await props.collectorClient.list();
+  } catch (error) {
+    collectorsErrorMessage.value =
+      error instanceof Error ? error.message : "读取 Collector 失败。";
+  } finally {
+    collectorsLoading.value = false;
+  }
+}
+
+function resetAndLoadSessions(): void {
+  nextCursor.value = undefined;
+  hasMore.value = false;
+  void loadSessions(false);
+}
+
+function handleCollectorChange(): void {
+  selectedAgent.value = "";
+  emit("collector-change", selectedCollectorId.value);
+  resetAndLoadSessions();
+}
+
+function handleAgentChange(): void {
+  resetAndLoadSessions();
+}
+
+async function refresh(): Promise<void> {
+  await Promise.all([loadCollectors(), loadSessions(false)]);
+}
+
+watch(
+  () => props.initialCollectorId,
+  (collectorId) => {
+    const nextCollectorId = collectorId ?? "";
+    if (nextCollectorId === selectedCollectorId.value) return;
+
+    selectedCollectorId.value = nextCollectorId;
+    selectedAgent.value = "";
+    if (mounted) resetAndLoadSessions();
+  },
+);
+
+onMounted(() => {
+  mounted = true;
+  void refresh();
+});
 </script>
 
 <template>
@@ -158,7 +235,6 @@ onMounted(() => void loadSessions());
         <div class="page-heading">
           <h1>Sessions</h1>
           <div class="source-line">
-            <el-tag effect="plain" size="small">OpenCode</el-tag>
             <span>{{ sourceLabel }}</span>
             <span class="source-separator" aria-hidden="true"></span>
             <span>{{ resultSummary }}</span>
@@ -173,12 +249,53 @@ onMounted(() => void loadSessions());
             circle
             :loading="loading"
             aria-label="刷新 Session"
-            @click="loadSessions(false)"
+            @click="refresh"
           >
             <refresh-cw :size="17" :stroke-width="1.8" />
           </el-button>
         </el-tooltip>
       </header>
+
+      <section class="session-filter-toolbar" aria-label="Session 筛选">
+        <label class="session-filter-field">
+          <span>Collector</span>
+          <el-select
+            v-model="selectedCollectorId"
+            class="session-filter-select"
+            :loading="collectorsLoading"
+            placeholder="全部 Collector"
+            aria-label="按 Collector 筛选"
+            @change="handleCollectorChange"
+          >
+            <el-option label="全部 Collector" value="" />
+            <el-option
+              v-for="collector in collectors"
+              :key="collector.id"
+              :label="collector.name"
+              :value="collector.id"
+            />
+          </el-select>
+        </label>
+
+        <label class="session-filter-field">
+          <span>Agent</span>
+          <el-select
+            v-model="selectedAgent"
+            class="session-filter-select"
+            placeholder="全部 Agent"
+            aria-label="按 Agent 筛选"
+            @change="handleAgentChange"
+          >
+            <el-option label="全部 Agent" value="" />
+            <el-option
+              v-for="agent in agentOptions"
+              :key="agent"
+              :label="agent"
+              :value="agent"
+            />
+          </el-select>
+        </label>
+      </section>
 
       <el-alert
         v-if="errorMessage"
@@ -202,7 +319,16 @@ onMounted(() => void loadSessions());
         :closable="false"
       />
 
-      <section class="table-region" aria-label="OpenCode Session 列表">
+      <el-alert
+        v-if="collectorsErrorMessage"
+        class="warning-alert"
+        :title="collectorsErrorMessage"
+        type="warning"
+        show-icon
+        :closable="false"
+      />
+
+      <section class="table-region" aria-label="Session 列表">
         <el-table
           ref="table"
           v-loading="loading"
@@ -221,6 +347,12 @@ onMounted(() => void loadSessions());
           <el-table-column label="来源" width="130" show-overflow-tooltip>
             <template #default="{ row }">
               {{ row.collectorName }}
+            </template>
+          </el-table-column>
+
+          <el-table-column label="Agent" width="120" show-overflow-tooltip>
+            <template #default="{ row }">
+              <el-tag effect="plain" size="small">{{ row.agent }}</el-tag>
             </template>
           </el-table-column>
 
@@ -254,7 +386,7 @@ onMounted(() => void loadSessions());
           <template #empty>
             <el-empty
               :image-size="64"
-              :description="errorMessage ? '暂时无法读取 Session' : '未发现 OpenCode Session'"
+              :description="errorMessage ? '暂时无法读取 Session' : '未发现 Session'"
             />
           </template>
         </el-table>

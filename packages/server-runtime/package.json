@@ -9,6 +9,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@nexume/collector-core": "workspace:*",
     "@nexume/contracts": "workspace:*",
     "@nexume/server-core": "workspace:*",
     "@nexume/storage": "workspace:*",
@@ -16,7 +17,6 @@
     "socket.io": "^4.8.3"
   },
   "devDependencies": {
-    "@nexume/collector-core": "workspace:*",
     "@types/bun": "latest",
     "typescript": "^5.7.2"
   }

@@ -28,6 +28,7 @@ const authError = ref("");
 const client = shallowRef<SessionClient>();
 const collectorClient = shallowRef<CollectorClient>();
 const activeView = ref<"sessions" | "collectors">("sessions");
+const selectedCollectorId = ref("");
 const initializationReady = ref(false);
 const bootstrapReady = ref(false);
 
@@ -37,6 +38,7 @@ function clearAccessToken(): void {
   client.value = undefined;
   collectorClient.value = undefined;
   authError.value = "访问令牌无效，请重新输入。";
+  selectedCollectorId.value = "";
 }
 
 const initializationClient = createHttpInitializationClient(clearAccessToken);
@@ -48,6 +50,7 @@ function disconnect(): void {
   collectorClient.value = undefined;
   authError.value = "";
   activeView.value = "sessions";
+  selectedCollectorId.value = "";
 }
 
 function createClient(token: string): SessionClient {
@@ -89,6 +92,11 @@ function handleInitialized(token: string): void {
   initializationReady.value = true;
 }
 
+function viewCollectorSessions(collectorId: string): void {
+  selectedCollectorId.value = collectorId;
+  activeView.value = "sessions";
+}
+
 function bootstrap(): void {
   const hash = new URLSearchParams(window.location.hash.slice(1));
   const token = hash.get("accessToken");
@@ -126,9 +134,12 @@ bootstrap();
   />
 
   <session-app
-    v-else-if="activeView === 'sessions' && client"
+    v-else-if="activeView === 'sessions' && client && collectorClient"
     :client="client"
+    :collector-client="collectorClient"
+    :initial-collector-id="selectedCollectorId"
     :source-label="props.sourceLabel"
+    @collector-change="selectedCollectorId = $event"
   >
     <template #header-actions>
       <nav class="server-view-nav" :aria-label="`${props.sourceLabel} 视图`">
@@ -161,7 +172,11 @@ bootstrap();
     </template>
   </session-app>
 
-  <collector-app v-else-if="collectorClient" :client="collectorClient">
+  <collector-app
+    v-else-if="collectorClient"
+    :client="collectorClient"
+    @view-sessions="viewCollectorSessions"
+  >
     <template #header-actions>
       <nav class="server-view-nav" :aria-label="`${props.sourceLabel} 视图`">
         <el-tooltip content="Sessions" placement="bottom">

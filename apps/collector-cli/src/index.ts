@@ -32,11 +32,14 @@ const connection = new CollectorConnection({
     version: packageJson.version,
     agents: ["opencode"],
   },
-  source: collector,
+  sources: [collector],
   onStateChange(state, detail) {
     console.log(
       `[collector] ${state}${detail ? `: ${detail}` : ""}`,
     );
+  },
+  onSyncError(agent, error) {
+    console.error(`[collector] ${agent} sync failed:`, error);
   },
 });
 

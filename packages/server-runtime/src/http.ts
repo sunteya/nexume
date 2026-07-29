@@ -12,12 +12,9 @@ import {
   type ManagedCollectorInfo,
   type RuntimeInfo,
   type SessionBatchSize,
+  type SessionStatus,
 } from "@nexume/contracts";
-import {
-  CollectorQueryFailedError,
-  InvalidSessionCursorError,
-  type ServerCore,
-} from "@nexume/server-core";
+import { InvalidSessionCursorError, type ServerCore } from "@nexume/server-core";
 import { AlreadyInitializedError } from "@nexume/storage";
 
 import { CollectorManagementError } from "./collector-management";
@@ -42,6 +39,7 @@ export interface RequestHandlerOptions {
     rename(id: string, name: string): ManagedCollectorInfo;
     delete(id: string): void;
     revealToken(id: string): string;
+    sync(id: string): void;
   };
   getRuntimeInfo?: () => RuntimeInfo;
   webRoot?: string;
@@ -76,9 +74,17 @@ function hasValidToken(request: Request, expectedToken: string): boolean {
 function parseSessionParams(url: URL): ListSessionsParams {
   const limitValue = url.searchParams.get("limit");
   const cursor = url.searchParams.get("cursor") ?? undefined;
+  const collectorId = url.searchParams.get("collectorId") ?? undefined;
+  const agent = url.searchParams.get("agent") ?? undefined;
+  const status = (url.searchParams.get("status") ?? undefined) as
+    | SessionStatus
+    | undefined;
   const params = {
     limit: (limitValue === null ? 50 : Number(limitValue)) as SessionBatchSize,
     cursor,
+    collectorId,
+    agent,
+    status,
   };
 
   assertListSessionsParams(params);
@@ -243,10 +249,6 @@ export function createRequestHandler(options: RequestHandlerOptions) {
             return errorResponse("invalid_request", error.message, 400);
           }
 
-          if (error instanceof CollectorQueryFailedError) {
-            return errorResponse("collector_unavailable", error.message, 503);
-          }
-
           options.onError?.(error);
           return errorResponse("internal_error", "Server 内部错误。", 500);
         }
@@ -286,6 +288,20 @@ export function createRequestHandler(options: RequestHandlerOptions) {
           }
           options.onError?.(error);
           return errorResponse("internal_error", "读取 Collector token 失败。", 500);
+        }
+      }
+
+      const syncMatch = url.pathname.match(/^\/api\/collectors\/([^/]+)\/sync$/);
+      if (request.method === "POST" && syncMatch && options.collectors) {
+        try {
+          options.collectors.sync(syncMatch[1]!);
+          return json({ accepted: true }, 202);
+        } catch (error) {
+          if (error instanceof CollectorManagementError) {
+            return errorResponse(error.code, error.message, error.status);
+          }
+          options.onError?.(error);
+          return errorResponse("internal_error", "触发 Collector 同步失败。", 500);
         }
       }
 

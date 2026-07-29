@@ -73,32 +73,37 @@ afterEach(() => {
 });
 
 describe("OpenCodeCollector", () => {
-  test("returns active root sessions in stable updated order", () => {
+  test("returns root sessions including archived data in incremental order", () => {
     const collector = new OpenCodeCollector({ databasePath: createDatabase() });
-    const result = collector.querySessions({ asOf: 10_000, limit: 20 });
+    const result = collector.readSessionPage({ mode: "reconcile", limit: 20 });
 
     expect(result.hasMore).toBe(true);
     expect(result.items).toHaveLength(20);
     expect(result.items[0]).toMatchObject({
-      id: "session-25",
+      id: "session-01",
       agent: "opencode",
     });
     expect(result.items.some((session) => session.id === "child")).toBe(false);
-    expect(result.items.some((session) => session.id === "archived")).toBe(false);
   });
 
-  test("continues strictly after a cursor", () => {
+  test("continues strictly after an opaque checkpoint", () => {
     const collector = new OpenCodeCollector({ databasePath: createDatabase() });
-    const result = collector.querySessions({
-      asOf: 10_000,
+    const result = collector.readSessionPage({
+      mode: "incremental",
       limit: 20,
-      cursor: { updatedAt: 2_100, agent: "opencode", id: "session-21" },
+      checkpoint: {
+        format: collector.checkpointFormat,
+        value: JSON.stringify({ updatedAt: 2_000, id: "session-20" }),
+      },
     });
 
     expect(result.hasMore).toBe(false);
-    expect(result.items).toHaveLength(20);
-    expect(result.items[0]?.id).toBe("session-20");
-    expect(result.items.at(-1)?.id).toBe("session-01");
+    expect(result.items).toHaveLength(6);
+    expect(result.items[0]?.id).toBe("session-21");
+    expect(result.items.at(-1)).toMatchObject({
+      id: "archived",
+      archivedAt: 4_100,
+    });
   });
 
   test("reports a missing database", () => {
@@ -106,7 +111,7 @@ describe("OpenCodeCollector", () => {
       databasePath: "/path/that/does/not/exist.db",
     });
 
-    expect(() => collector.querySessions({ asOf: 10_000, limit: 20 })).toThrow(
+    expect(() => collector.readSessionPage({ mode: "incremental", limit: 20 })).toThrow(
       CollectorUnavailableError,
     );
   });
@@ -116,7 +121,7 @@ describe("OpenCodeCollector", () => {
       databasePath: createDatabase(false),
     });
 
-    expect(() => collector.querySessions({ asOf: 10_000, limit: 20 })).toThrow(
+    expect(() => collector.readSessionPage({ mode: "incremental", limit: 20 })).toThrow(
       UnsupportedCollectorDataError,
     );
   });

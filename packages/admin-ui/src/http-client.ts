@@ -65,6 +65,11 @@ export function createHttpSessionClient(
       const url = new URL("/api/sessions", window.location.origin);
       url.searchParams.set("limit", String(params.limit));
       if (params.cursor) url.searchParams.set("cursor", params.cursor);
+      if (params.collectorId) {
+        url.searchParams.set("collectorId", params.collectorId);
+      }
+      if (params.agent) url.searchParams.set("agent", params.agent);
+      if (params.status) url.searchParams.set("status", params.status);
 
       const response = await fetch(url, {
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -146,6 +151,16 @@ export function createHttpCollectorClient(
         method: "DELETE",
       });
       if (!response.ok) throw await responseError(response, "删除 Collector 失败。");
+    },
+
+    async sync(id: string) {
+      const response = await request(
+        `/api/collectors/${encodeURIComponent(id)}/sync`,
+        { method: "POST" },
+      );
+      if (!response.ok) {
+        throw await responseError(response, "触发 Collector 同步失败。");
+      }
     },
 
     async getToken(id: string) {

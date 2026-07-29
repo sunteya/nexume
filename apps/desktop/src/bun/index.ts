@@ -39,7 +39,7 @@ const runtime = startServerRuntime({
   hostname: "0.0.0.0",
   port,
   webRoot: resolve(import.meta.dir, "../web"),
-  localSource: collector,
+  localSources: [collector],
   localMetadata: {
     hostname: hostname(),
     version: packageJson.version,

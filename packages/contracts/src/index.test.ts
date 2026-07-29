@@ -4,20 +4,20 @@ import {
   assertCollectorDescriptor,
   assertCollectorRuntimeMetadata,
   assertCollectorSocketAuth,
-  assertCollectorSessionQuery,
+  assertBeginSessionSyncRequest,
   assertListSessionsParams,
+  assertSessionSyncBatchRequest,
 } from "./index";
 
 describe("Session query contracts", () => {
   test("accepts supported batch queries", () => {
     expect(() =>
-      assertListSessionsParams({ limit: 50, cursor: "opaque" }),
-    ).not.toThrow();
-    expect(() =>
-      assertCollectorSessionQuery({
-        asOf: 1_000,
-        limit: 20,
-        cursor: { updatedAt: 900, agent: "opencode", id: "session-1" },
+      assertListSessionsParams({
+        limit: 50,
+        cursor: "opaque",
+        collectorId: "collector-1",
+        agent: "claude-code",
+        status: "archived",
       }),
     ).not.toThrow();
   });
@@ -42,16 +42,62 @@ describe("assertCollectorDescriptor", () => {
     ).not.toThrow();
   });
 
-  test("rejects unknown agents", () => {
+  test("accepts extensible agent identifiers", () => {
     expect(() =>
       assertCollectorDescriptor({
         id: "workstation",
         name: "Workstation",
         hostname: "host.local",
         version: "0.0.1",
-        agents: ["unknown"],
+        agents: ["claude-code"],
       }),
-    ).toThrow("Collector Agent 列表无效");
+    ).not.toThrow();
+  });
+});
+
+describe("Session sync contracts", () => {
+  test("validates a begin request and normalized batch", () => {
+    expect(() =>
+      assertBeginSessionSyncRequest({
+        agent: "codex",
+        checkpointFormat: "codex/jsonl/v1",
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertSessionSyncBatchRequest({
+        agent: "codex",
+        runId: "run-1",
+        sequence: 0,
+        complete: true,
+        items: [{
+          id: "session-1",
+          agent: "codex",
+          title: "Session",
+          directory: "/workspace",
+          createdAt: 100,
+          updatedAt: 200,
+        }],
+      }),
+    ).not.toThrow();
+  });
+
+  test("rejects a batch whose item belongs to another agent", () => {
+    expect(() =>
+      assertSessionSyncBatchRequest({
+        agent: "codex",
+        runId: "run-1",
+        sequence: 0,
+        complete: true,
+        items: [{
+          id: "session-1",
+          agent: "opencode",
+          title: "Session",
+          directory: "/workspace",
+          createdAt: 100,
+          updatedAt: 200,
+        }],
+      }),
+    ).toThrow("Agent 与同步任务不一致");
   });
 });
 

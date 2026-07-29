@@ -2,8 +2,17 @@ export {
   CollectorConnection,
   type CollectorConnectionOptions,
   type CollectorConnectionState,
-  type CollectorDataSource,
 } from "./connection";
+export {
+  type CollectorDataSource,
+  type SessionSourcePage,
+  type SessionSourcePageRequest,
+} from "./source";
+export {
+  CollectorSyncRunner,
+  type CollectorSyncRunnerOptions,
+  type SessionSyncTarget,
+} from "./sync-runner";
 export {
   CollectorUnavailableError,
   OpenCodeCollector,

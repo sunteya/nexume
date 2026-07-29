@@ -39,6 +39,7 @@ describe("Nexume storage", () => {
     ).toEqual([
       { name: "0001_initial" },
       { name: "0002_collectors" },
+      { name: "0003_sessions" },
     ]);
     expect(
       first.db
@@ -54,7 +55,7 @@ describe("Nexume storage", () => {
       second.db.query<{ count: number }, []>(
         "SELECT count(*) AS count FROM system_migrations",
       ).get(),
-    ).toEqual({ count: 2 });
+    ).toEqual({ count: 3 });
     second.close();
   });
 

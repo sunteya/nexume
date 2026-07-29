@@ -13,10 +13,12 @@ describe("CollectorConnection", () => {
       serverUrl: "http://localhost:3000/",
       token: "collector-token",
       metadata,
-      source: {
+      sources: [{
+        agent: "opencode",
+        checkpointFormat: "opencode/test/v1",
         available: true,
-        querySessions: () => ({ items: [], hasMore: false }),
-      },
+        readSessionPage: () => ({ items: [], hasMore: false }),
+      }],
     });
 
     expect((connection.socket as unknown as { nsp: string }).nsp).toBe("/");

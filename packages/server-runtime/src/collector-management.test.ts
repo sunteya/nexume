@@ -29,9 +29,6 @@ async function createManagement(): Promise<{
   const service = new CollectorManagementService({
     collectors: storage.collectors,
     core: createServerCore(),
-    localSource: {
-      querySessions: () => ({ items: [], hasMore: false }),
-    },
     localMetadata: {
       hostname: "server.local",
       version: "0.0.1",
@@ -102,5 +99,27 @@ describe("CollectorManagementService", () => {
     service.delete(created.collector.id);
     expect(disconnected).toBe(created.collector.id);
     expect(service.authenticate(token)).toBeUndefined();
+  });
+
+  test("triggers online collectors and rejects offline collectors", async () => {
+    const { service } = await createManagement();
+    const created = service.create({
+      name: "Build Host",
+      connectionType: "remote",
+    });
+    let triggered = "";
+    service.setSyncTrigger((id) => {
+      triggered = id;
+      return true;
+    });
+
+    service.sync(created.collector.id);
+    expect(triggered).toBe(created.collector.id);
+
+    service.setSyncTrigger(() => false);
+    expect(() => service.sync(created.collector.id)).toThrow(
+      "Collector 当前离线",
+    );
+    expect(() => service.sync("missing")).toThrow("Collector 不存在");
   });
 });

@@ -32,5 +32,6 @@ export interface CollectorClient {
     input: RenameCollectorInput,
   ): Promise<ManagedCollectorInfo>;
   delete(id: string): Promise<void>;
+  sync(id: string): Promise<void>;
   getToken(id: string): Promise<CollectorTokenResult>;
 }

@@ -3,6 +3,7 @@ import {
   ElAlert,
   ElButton,
   ElEmpty,
+  ElInput,
   ElOption,
   ElSelect,
   ElTable,
@@ -11,8 +12,16 @@ import {
   ElTooltip,
   type TableInstance,
 } from "element-plus";
-import { ChevronDown, RefreshCw } from "lucide-vue-next";
-import { computed, nextTick, onActivated, onMounted, ref, watch } from "vue";
+import { RefreshCw, Search } from "lucide-vue-next";
+import {
+  computed,
+  nextTick,
+  onActivated,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from "vue";
 
 import type {
   CollectorQueryWarning,
@@ -47,11 +56,15 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
 const relativeTimeFormatter = new Intl.RelativeTimeFormat("en", {
   numeric: "auto",
 });
+const searchDebounceMs = 300;
+const loadMoreThreshold = 120;
 
 const sessions = ref<SessionSummary[]>([]);
 const collectors = ref<ManagedCollectorInfo[]>([]);
 const selectedCollectorId = ref(props.initialCollectorId ?? "");
 const selectedAgent = ref("");
+const titleQuery = ref("");
+const appliedTitleQuery = ref("");
 const nextCursor = ref<string>();
 const hasMore = ref(false);
 const warnings = ref<CollectorQueryWarning[]>([]);
@@ -60,9 +73,11 @@ const collectorsLoading = ref(false);
 const errorMessage = ref("");
 const collectorsErrorMessage = ref("");
 const table = ref<TableInstance>();
+const tableRegion = ref<HTMLElement>();
 let latestRequest = 0;
 let mounted = false;
 let initialActivation = true;
+let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
 const resultSummary = computed(() =>
   sessions.value.length === 0
@@ -142,6 +157,7 @@ async function loadSessions(append = false): Promise<void> {
       cursor: append ? nextCursor.value : undefined,
       collectorId: selectedCollectorId.value || undefined,
       agent: selectedAgent.value || undefined,
+      title: appliedTitleQuery.value || undefined,
     });
 
     if (requestId !== latestRequest) return;
@@ -172,7 +188,9 @@ async function loadSessions(append = false): Promise<void> {
     errorMessage.value =
       error instanceof Error ? error.message : "Unable to load sessions.";
   } finally {
-    if (requestId === latestRequest) loading.value = false;
+    if (requestId === latestRequest) {
+      loading.value = false;
+    }
   }
 }
 
@@ -195,6 +213,34 @@ function resetAndLoadSessions(): void {
   nextCursor.value = undefined;
   hasMore.value = false;
   void loadSessions(false);
+}
+
+function applyTitleSearch(): void {
+  if (searchTimer !== undefined) clearTimeout(searchTimer);
+  searchTimer = undefined;
+  const nextTitle = titleQuery.value.trim();
+  if (nextTitle === appliedTitleQuery.value) return;
+
+  appliedTitleQuery.value = nextTitle;
+  resetAndLoadSessions();
+}
+
+function handleTitleInput(): void {
+  if (searchTimer !== undefined) clearTimeout(searchTimer);
+  searchTimer = setTimeout(applyTitleSearch, searchDebounceMs);
+}
+
+function handleTableScroll({ scrollTop }: { scrollTop: number }): void {
+  const scrollContainer = tableRegion.value?.querySelector<HTMLElement>(
+    ".el-scrollbar__wrap",
+  );
+  if (!scrollContainer) return;
+
+  const distanceToBottom =
+    scrollContainer.scrollHeight - scrollContainer.clientHeight - scrollTop;
+  if (distanceToBottom <= loadMoreThreshold) {
+    void loadSessions(true);
+  }
 }
 
 function handleCollectorChange(): void {
@@ -228,6 +274,10 @@ onMounted(() => {
   void refresh();
 });
 
+onBeforeUnmount(() => {
+  if (searchTimer !== undefined) clearTimeout(searchTimer);
+});
+
 onActivated(() => {
   if (initialActivation) {
     initialActivation = false;
@@ -256,6 +306,22 @@ onActivated(() => {
     </page-toolbar>
 
       <section class="session-filter-toolbar" aria-label="Session filters">
+        <label class="session-filter-field session-search-field">
+          <span>Title</span>
+          <el-input
+            v-model="titleQuery"
+            class="session-filter-input"
+            :prefix-icon="Search"
+            placeholder="Search titles"
+            maxlength="256"
+            clearable
+            aria-label="Search sessions by title"
+            @input="handleTitleInput"
+            @clear="applyTitleSearch"
+            @keyup.enter="applyTitleSearch"
+          />
+        </label>
+
         <label class="session-filter-field">
           <span>Collector</span>
           <el-select
@@ -327,7 +393,7 @@ onActivated(() => {
         :closable="false"
       />
 
-      <section class="table-region" aria-label="Session list">
+      <section ref="tableRegion" class="table-region" aria-label="Session list">
         <el-table
           ref="table"
           v-loading="loading"
@@ -336,6 +402,7 @@ onActivated(() => {
           :row-key="getRowKey"
           table-layout="fixed"
           scrollbar-always-on
+          @scroll="handleTableScroll"
         >
           <el-table-column label="Title" min-width="250" show-overflow-tooltip>
             <template #default="{ row }">
@@ -391,17 +458,5 @@ onActivated(() => {
         </el-table>
       </section>
 
-      <footer class="load-more-bar">
-        <span>{{ resultSummary }}</span>
-        <el-button
-          v-if="hasMore"
-          :loading="loading"
-          :icon="ChevronDown"
-          @click="loadSessions(true)"
-        >
-          Load more
-        </el-button>
-        <span v-else-if="sessions.length > 0">All sessions loaded</span>
-      </footer>
-  </section>
+    </section>
 </template>

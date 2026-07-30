@@ -17,6 +17,7 @@ describe("Session query contracts", () => {
         cursor: "opaque",
         collectorId: "collector-1",
         agent: "claude-code",
+        title: "release notes",
         status: "archived",
       }),
     ).not.toThrow();
@@ -26,6 +27,15 @@ describe("Session query contracts", () => {
     expect(() =>
       assertListSessionsParams({ limit: 25 as 20 }),
     ).toThrow("Session 每批数量无效");
+  });
+
+  test("rejects blank or oversized title searches", () => {
+    expect(() =>
+      assertListSessionsParams({ limit: 50, title: "   " }),
+    ).toThrow("Session 标题搜索条件无效");
+    expect(() =>
+      assertListSessionsParams({ limit: 50, title: "x".repeat(257) }),
+    ).toThrow("Session 标题搜索条件无效");
   });
 });
 

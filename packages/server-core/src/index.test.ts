@@ -45,7 +45,9 @@ function catalog(records: CachedSessionRecord[]): CachedSessionCatalog {
       let items = records.filter(
         (item) =>
           (!options.collectorId || item.collectorId === options.collectorId) &&
-          (!options.agent || item.agent === options.agent),
+          (!options.agent || item.agent === options.agent) &&
+          (!options.title ||
+            item.title.toLowerCase().includes(options.title.toLowerCase())),
       );
       if (options.cursor) {
         const index = items.findIndex(
@@ -144,12 +146,14 @@ describe("createServerCore", () => {
       limit: 50,
       collectorId: "collector-a",
       agent: "claude-code",
+      title: "release notes",
       status: "archived",
     });
     expect(calls).toEqual([{
       limit: 50,
       collectorId: "collector-a",
       agent: "claude-code",
+      title: "release notes",
       status: "archived",
       cursor: undefined,
     }]);
@@ -169,6 +173,25 @@ describe("createServerCore", () => {
       core.listSessions({
         limit: 20,
         collectorId: "collector-b",
+        cursor: first.nextCursor,
+      }),
+    ).rejects.toBeInstanceOf(InvalidSessionCursorError);
+  });
+
+  test("filters titles and rejects a cursor after the title changes", async () => {
+    const records = Array.from({ length: 50 }, (_, index) => ({
+      ...record("collector-a", "opencode", 100 - index, index),
+      title: index % 2 === 0 ? `Release ${index}` : `Draft ${index}`,
+    }));
+    const core = createServerCore({ sessions: catalog(records) });
+    const first = await core.listSessions({ limit: 20, title: "release" });
+
+    expect(first.items).toHaveLength(20);
+    expect(first.nextCursor).toBeDefined();
+    await expect(
+      core.listSessions({
+        limit: 20,
+        title: "draft",
         cursor: first.nextCursor,
       }),
     ).rejects.toBeInstanceOf(InvalidSessionCursorError);

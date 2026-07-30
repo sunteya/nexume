@@ -278,7 +278,12 @@ button:focus-visible,
   width: 210px;
 }
 
-.session-filter-select .el-select__wrapper {
+.session-filter-toolbar .session-filter-input {
+  width: 280px;
+}
+
+.session-filter-select .el-select__wrapper,
+.session-filter-input .el-input__wrapper {
   min-height: 32px;
   border-radius: 5px;
   box-shadow: 0 0 0 1px var(--nx-border) inset;
@@ -356,7 +361,6 @@ button:focus-visible,
 }
 
 .session-id,
-.runtime-value code,
 .token-value-input input {
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
@@ -364,85 +368,6 @@ button:focus-visible,
 .session-id {
   color: var(--nx-text-muted);
   font-size: 12px;
-}
-
-.load-more-bar {
-  display: flex;
-  min-height: 50px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 8px 16px 10px;
-  color: var(--nx-text-muted);
-  background: var(--nx-bg);
-  font-size: 12px;
-}
-
-.desktop-runtime-bar {
-  display: flex;
-  min-height: 44px;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 20px;
-  padding: 7px 20px;
-  border-bottom: 1px solid var(--nx-border);
-  background: #edf4f1;
-  color: var(--nx-text-soft);
-  font-size: 12px;
-}
-
-.desktop-runtime-status,
-.desktop-runtime-values,
-.runtime-value {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-}
-
-.desktop-runtime-status {
-  flex: 0 0 auto;
-  gap: 7px;
-}
-
-.desktop-runtime-status strong {
-  color: var(--nx-text);
-}
-
-.runtime-status-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #16815f;
-  box-shadow: 0 0 0 2px #cce4da;
-}
-
-.desktop-runtime-values {
-  flex: 1 1 auto;
-  justify-content: flex-end;
-  gap: 12px;
-  overflow: hidden;
-}
-
-.runtime-value {
-  gap: 3px;
-  overflow: hidden;
-}
-
-.runtime-value code {
-  overflow: hidden;
-  color: var(--nx-text-soft);
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.runtime-value .el-button {
-  width: 26px;
-  height: 26px;
-  flex: 0 0 auto;
-  margin: 0;
-  padding: 0;
 }
 
 .collector-table-region .el-table .el-tag,
@@ -636,10 +561,22 @@ button:focus-visible,
   }
 
   .page-toolbar,
-  .session-filter-toolbar,
-  .desktop-runtime-bar {
+  .session-filter-toolbar {
     padding-right: 12px;
     padding-left: 12px;
+  }
+
+  .session-filter-toolbar {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+  }
+
+  .session-search-field {
+    flex: 1 1 100%;
+  }
+
+  .session-filter-toolbar .session-filter-input {
+    width: 100%;
   }
 
   .table-region {
@@ -647,22 +584,6 @@ button:focus-visible,
     padding-left: 10px;
   }
 
-  .load-more-bar {
-    padding-right: 12px;
-    padding-left: 12px;
-  }
-
-  .desktop-runtime-bar {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 5px;
-  }
-
-  .desktop-runtime-values {
-    width: 100%;
-    align-items: flex-start;
-    flex-direction: column;
-  }
 }
 
 @media (max-width: 520px) {
@@ -698,6 +619,7 @@ button:focus-visible,
 
   .session-filter-toolbar {
     align-items: stretch;
+    flex-direction: column;
     gap: 8px;
   }
 
@@ -708,7 +630,8 @@ button:focus-visible,
     gap: 4px;
   }
 
-  .session-filter-toolbar .session-filter-select {
+  .session-filter-toolbar .session-filter-select,
+  .session-filter-toolbar .session-filter-input {
     --el-select-width: 100%;
     width: 100%;
   }
@@ -724,10 +647,6 @@ button:focus-visible,
   }
 
   .page-toolbar-actions .collector-create-button > span {
-    display: none;
-  }
-
-  .load-more-bar > span:first-child {
     display: none;
   }
 
@@ -773,15 +692,6 @@ html.dark .app-navigation-item.is-active {
 
 html.dark .table-region .el-table {
   --el-table-row-hover-bg-color: #26352f;
-}
-
-html.dark .desktop-runtime-bar {
-  background: #1d2925;
-}
-
-html.dark .runtime-status-dot {
-  background: #59bea0;
-  box-shadow: 0 0 0 2px #294b40;
 }
 
 @media (prefers-reduced-motion: reduce) {

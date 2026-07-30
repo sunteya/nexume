@@ -28,6 +28,7 @@ export interface ListSessionsParams {
   cursor?: string;
   collectorId?: string;
   agent?: AgentId;
+  title?: string;
   status?: SessionStatus;
 }
 
@@ -208,6 +209,12 @@ export function assertListSessionsParams(
     throw new Error("Collector ID 无效。");
   }
   if (params.agent !== undefined) assertAgentId(params.agent);
+  if (
+    params.title !== undefined &&
+    (!params.title.trim() || params.title.length > 256)
+  ) {
+    throw new Error("Session 标题搜索条件无效。");
+  }
   if (
     params.status !== undefined &&
     !sessionStatuses.includes(params.status)

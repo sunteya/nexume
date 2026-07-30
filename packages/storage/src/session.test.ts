@@ -283,6 +283,35 @@ describe("session storage", () => {
     storage.close();
   });
 
+  test("filters titles with case-insensitive substring matching while paginating", async () => {
+    const storage = await createStorage();
+    sync(storage, {
+      runId: "title-search",
+      items: [
+        item("release-3", 30, { title: "Release Notes 3" }),
+        item("draft", 25, { title: "Draft plan" }),
+        item("release-2", 20, { title: "release notes 2" }),
+        item("release-1", 10, { title: "First RELEASE notes" }),
+      ],
+    });
+
+    const first = storage.sessions.list({ title: "release", limit: 2 });
+    const second = storage.sessions.list({
+      title: "release",
+      limit: 2,
+      cursor: first.nextCursor,
+    });
+
+    expect(first.items.map((row) => row.sourceId)).toEqual([
+      "release-3",
+      "release-2",
+    ]);
+    expect(first.hasMore).toBe(true);
+    expect(second.items.map((row) => row.sourceId)).toEqual(["release-1"]);
+    expect(second.hasMore).toBe(false);
+    storage.close();
+  });
+
   test("persists sessions, checkpoints, active runs, and batch idempotency", async () => {
     const dataDir = createDataDir();
     const first = await createStorage(dataDir);

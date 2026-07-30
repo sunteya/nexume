@@ -169,7 +169,7 @@ describe("Server HTTP API", () => {
     });
     const response = await handler(
       new Request(
-        "http://localhost/api/sessions?limit=20&cursor=opaque&collectorId=collector-a&agent=codex&status=archived",
+        "http://localhost/api/sessions?limit=20&cursor=opaque&collectorId=collector-a&agent=codex&title=release%20notes&status=archived",
         {
         headers: authorization,
         },
@@ -182,6 +182,7 @@ describe("Server HTTP API", () => {
       cursor: "opaque",
       collectorId: "collector-a",
       agent: "codex",
+      title: "release notes",
       status: "archived",
     });
   });

@@ -69,6 +69,7 @@ export function createHttpSessionClient(
         url.searchParams.set("collectorId", params.collectorId);
       }
       if (params.agent) url.searchParams.set("agent", params.agent);
+      if (params.title) url.searchParams.set("title", params.title);
       if (params.status) url.searchParams.set("status", params.status);
 
       const response = await fetch(url, {

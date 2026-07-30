@@ -28,6 +28,7 @@ export interface SessionListCursor extends SessionKey {
 export interface ListSessionsOptions {
   collectorId?: string;
   agent?: AgentId;
+  title?: string;
   status?: SessionStatus;
   limit: number;
   cursor?: SessionListCursor;
@@ -107,6 +108,10 @@ export class SessionStore {
     if (options.agent !== undefined) {
       conditions.push("agent = ?");
       bindings.push(options.agent);
+    }
+    if (options.title !== undefined) {
+      conditions.push("instr(lower(title), lower(?)) > 0");
+      bindings.push(options.title);
     }
 
     const status = options.status ?? "active";

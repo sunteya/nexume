@@ -30,7 +30,6 @@ import {
   Pencil,
   Plus,
   RefreshCw,
-  Server,
   Trash2,
   X,
 } from "lucide-vue-next";
@@ -40,7 +39,6 @@ import type {
   CollectorConnectionType,
   CreateCollectorInput,
   ManagedCollectorInfo,
-  RuntimeInfo,
 } from "@nexume/contracts";
 
 import type { CollectorClient } from "./client";
@@ -77,7 +75,6 @@ const tokenTitle = ref("Collector token");
 const tokenLoading = ref(false);
 const syncingCollectorIds = ref(new Set<string>());
 const showTokenAfterCreate = ref(false);
-const runtimeInfo = ref<RuntimeInfo>();
 const compactActionsMedia = window.matchMedia("(max-width: 520px)");
 const compactActions = ref(compactActionsMedia.matches);
 let initialActivation = true;
@@ -155,12 +152,7 @@ async function loadCollectors(): Promise<void> {
   loading.value = true;
   errorMessage.value = "";
   try {
-    const [items, runtime] = await Promise.all([
-      props.client.list(),
-      props.client.getRuntimeInfo(),
-    ]);
-    collectors.value = items;
-    runtimeInfo.value = runtime;
+    collectors.value = await props.client.list();
   } catch (error) {
     errorMessage.value = errorText(error, "Unable to load collectors.");
   } finally {
@@ -369,32 +361,6 @@ onUnmounted(() => {
         show-icon
         :closable="false"
       />
-
-      <section
-        v-if="runtimeInfo?.kind === 'desktop'"
-        class="desktop-runtime-bar"
-        aria-label="Desktop Server connection details"
-      >
-        <div class="desktop-runtime-status">
-          <span class="runtime-status-dot" aria-hidden="true"></span>
-          <strong>Desktop Server</strong>
-          <span>Port {{ runtimeInfo.port }}</span>
-        </div>
-        <div class="desktop-runtime-values">
-          <div v-for="url in runtimeInfo.urls" :key="url" class="runtime-value">
-            <code>{{ url }}</code>
-            <el-tooltip content="Copy address" placement="top">
-              <el-button
-                link
-                aria-label="Copy address"
-                @click="copyText(url, 'Address copied.')"
-              >
-                <copy :size="15" :stroke-width="1.8" />
-              </el-button>
-            </el-tooltip>
-          </div>
-        </div>
-      </section>
 
       <section class="table-region collector-table-region" aria-label="Collector list">
         <!-- @vue-generic {ManagedCollectorInfo} -->

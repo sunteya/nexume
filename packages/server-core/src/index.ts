@@ -31,6 +31,7 @@ export interface CachedSessionRecord extends CachedSessionPosition {
 export interface CachedSessionListOptions {
   collectorId?: string;
   agent?: AgentId;
+  title?: string;
   status: SessionStatus;
   limit: number;
   cursor?: CachedSessionPosition;
@@ -69,6 +70,7 @@ interface RegistryEntry {
 interface SessionCursorFilters {
   collectorId?: string;
   agent?: AgentId;
+  title?: string;
   status: SessionStatus;
 }
 
@@ -100,6 +102,7 @@ function filtersFor(params: ListSessionsParams): SessionCursorFilters {
   return {
     ...(params.collectorId ? { collectorId: params.collectorId } : {}),
     ...(params.agent ? { agent: params.agent } : {}),
+    ...(params.title ? { title: params.title } : {}),
     status: params.status ?? "active",
   };
 }
@@ -110,6 +113,7 @@ function filtersEqual(
 ): boolean {
   return left.collectorId === right.collectorId &&
     left.agent === right.agent &&
+    left.title === right.title &&
     left.status === right.status;
 }
 
@@ -154,6 +158,14 @@ function decodeCursor(value: string): SessionCursor {
     }
     if (decoded.filters.agent !== undefined) {
       assertAgentId(decoded.filters.agent);
+    }
+    if (
+      decoded.filters.title !== undefined &&
+      (typeof decoded.filters.title !== "string" ||
+        !decoded.filters.title.trim() ||
+        decoded.filters.title.length > 256)
+    ) {
+      throw new InvalidSessionCursorError();
     }
     assertPosition(decoded.position);
     return decoded as SessionCursor;

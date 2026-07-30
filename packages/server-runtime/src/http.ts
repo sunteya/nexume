@@ -76,6 +76,7 @@ function parseSessionParams(url: URL): ListSessionsParams {
   const cursor = url.searchParams.get("cursor") ?? undefined;
   const collectorId = url.searchParams.get("collectorId") ?? undefined;
   const agent = url.searchParams.get("agent") ?? undefined;
+  const title = url.searchParams.get("title") ?? undefined;
   const status = (url.searchParams.get("status") ?? undefined) as
     | SessionStatus
     | undefined;
@@ -84,6 +85,7 @@ function parseSessionParams(url: URL): ListSessionsParams {
     cursor,
     collectorId,
     agent,
+    title,
     status,
   };
 

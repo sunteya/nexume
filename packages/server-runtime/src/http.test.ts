@@ -245,6 +245,7 @@ describe("Server HTTP API", () => {
     const project = {
       id: "project-1",
       name: "Nexume",
+      groupName: "Work",
       directories: [{ collectorId: "local", directory: "/workspace/nexume" }],
       createdAt: 100,
       updatedAt: 100,
@@ -288,6 +289,7 @@ describe("Server HTTP API", () => {
     const project = {
       id: "project-1",
       name: "Nexume",
+      groupName: "Work",
       directories: [{ collectorId: "local", directory: "/workspace/nexume" }],
       createdAt: 100,
       updatedAt: 100,
@@ -298,14 +300,17 @@ describe("Server HTTP API", () => {
       projects: {
         list: () => [],
         create: (input) => {
-          calls.push(`create:${input.name}:${input.directories[0]?.directory}`)
+          calls.push(
+            `create:${input.name}:${input.groupName}:${input.directories[0]?.directory}`,
+          )
           return project
         },
         update: (id, input) => {
-          calls.push(`update:${id}:${input.name}`)
+          calls.push(`update:${id}:${input.name}:${input.groupName}`)
           return {
             ...project,
             name: input.name,
+            groupName: input.groupName,
             directories: input.directories,
           }
         },
@@ -322,6 +327,7 @@ describe("Server HTTP API", () => {
         headers: { ...authorization, "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "Nexume",
+          groupName: "Work",
           directories: [
             { collectorId: "local", directory: "/workspace/nexume" },
           ],
@@ -335,13 +341,18 @@ describe("Server HTTP API", () => {
       new Request("http://localhost/api/projects/project-1", {
         method: "PATCH",
         headers: { ...authorization, "Content-Type": "application/json" },
-        body: JSON.stringify({ name: "Renamed", directories: [] }),
+        body: JSON.stringify({
+          name: "Renamed",
+          groupName: "Personal",
+          directories: [],
+        }),
       }),
     )
     expect(updated.status).toBe(200)
     expect(await updated.json()).toEqual({
       ...project,
       name: "Renamed",
+      groupName: "Personal",
       directories: [],
     })
 
@@ -353,8 +364,8 @@ describe("Server HTTP API", () => {
     )
     expect(deleted.status).toBe(204)
     expect(calls).toEqual([
-      "create:Nexume:/workspace/nexume",
-      "update:project-1:Renamed",
+      "create:Nexume:Work:/workspace/nexume",
+      "update:project-1:Renamed:Personal",
       "delete:project-1",
     ])
   })

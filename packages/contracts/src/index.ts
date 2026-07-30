@@ -42,6 +42,7 @@ export interface ProjectDirectory {
 export interface ProjectInfo {
   id: string
   name: string
+  groupName?: string
   directories: ProjectDirectory[]
   createdAt: number
   updatedAt: number
@@ -49,6 +50,7 @@ export interface ProjectInfo {
 
 export interface CreateProjectInput {
   name: string
+  groupName?: string
   directories: ProjectDirectory[]
 }
 
@@ -453,6 +455,12 @@ export function assertProjectInput(
   }
   const input = value as Partial<CreateProjectInput>
   assertProjectName(input.name)
+  if (
+    input.groupName !== undefined &&
+    (typeof input.groupName !== "string" || input.groupName.trim().length > 128)
+  ) {
+    throw new Error("Project 分组名称不能超过 128 个字符。")
+  }
   if (!Array.isArray(input.directories) || input.directories.length > 1_000) {
     throw new Error("Project 目录列表无效。")
   }

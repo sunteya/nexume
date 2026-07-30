@@ -68,11 +68,15 @@ describe("Project contracts", () => {
     expect(() =>
       assertProjectInput({
         name: "Nexume",
+        groupName: "Work",
         directories: [
           { collectorId: "local", directory: "/workspace/nexume" },
           { collectorId: "remote", directory: "/srv/nexume" },
         ],
       }),
+    ).not.toThrow()
+    expect(() =>
+      assertProjectInput({ name: "Nexume", groupName: "   ", directories: [] }),
     ).not.toThrow()
   })
 
@@ -89,6 +93,13 @@ describe("Project contracts", () => {
         ],
       }),
     ).toThrow("Project 目录不能重复")
+    expect(() =>
+      assertProjectInput({
+        name: "Nexume",
+        groupName: "x".repeat(129),
+        directories: [],
+      }),
+    ).toThrow("Project 分组名称不能超过 128 个字符")
   })
 })
 

@@ -13,7 +13,13 @@ import {
   ElSelect,
   ElTooltip,
 } from "element-plus"
-import { Folder, FolderOpen, MoreHorizontal, Plus } from "lucide-vue-next"
+import {
+  ChevronRight,
+  Folder,
+  FolderOpen,
+  MoreHorizontal,
+  Plus,
+} from "lucide-vue-next"
 import { computed, onMounted, ref } from "vue"
 
 import type {
@@ -40,7 +46,9 @@ const dialogVisible = ref(false)
 const saving = ref(false)
 const editingProject = ref<ProjectInfo>()
 const name = ref("")
+const groupName = ref("")
 const selectedDirectoryKeys = ref<string[]>([])
+const collapsedGroupKeys = ref(new Set<string>())
 
 function directoryKey(directory: ProjectDirectory): string {
   return JSON.stringify([directory.collectorId, directory.directory])
@@ -83,6 +91,48 @@ const directoryGroups = computed(() => {
   }))
 })
 
+const ungroupedProjects = computed(() =>
+  projects.value.filter((project) => !project.groupName),
+)
+
+const projectGroups = computed(() => {
+  const groups = new Map<
+    string,
+    { key: string; name: string; projects: ProjectInfo[] }
+  >()
+  for (const project of projects.value) {
+    if (!project.groupName) continue
+
+    const key = project.groupName.toLocaleLowerCase("en-US")
+    const group = groups.get(key) ?? {
+      key,
+      name: project.groupName,
+      projects: [],
+    }
+    group.projects.push(project)
+    groups.set(key, group)
+  }
+  return [...groups.values()]
+})
+
+function isGroupCollapsed(key: string): boolean {
+  return collapsedGroupKeys.value.has(key)
+}
+
+function toggleGroup(key: string): void {
+  const collapsed = new Set(collapsedGroupKeys.value)
+  if (collapsed.has(key)) collapsed.delete(key)
+  else collapsed.add(key)
+  collapsedGroupKeys.value = collapsed
+}
+
+function expandGroup(group: string | undefined): void {
+  if (!group) return
+  const collapsed = new Set(collapsedGroupKeys.value)
+  collapsed.delete(group.toLocaleLowerCase("en-US"))
+  collapsedGroupKeys.value = collapsed
+}
+
 async function load(): Promise<void> {
   loading.value = true
   try {
@@ -104,6 +154,7 @@ async function load(): Promise<void> {
 function openCreate(): void {
   editingProject.value = undefined
   name.value = ""
+  groupName.value = ""
   selectedDirectoryKeys.value = []
   dialogVisible.value = true
 }
@@ -111,6 +162,7 @@ function openCreate(): void {
 function openEdit(project: ProjectInfo): void {
   editingProject.value = project
   name.value = project.name
+  groupName.value = project.groupName ?? ""
   selectedDirectoryKeys.value = project.directories.map(directoryKey)
   dialogVisible.value = true
 }
@@ -125,6 +177,7 @@ async function save(): Promise<void> {
   try {
     const input = {
       name: projectName,
+      ...(groupName.value.trim() ? { groupName: groupName.value.trim() } : {}),
       directories: selectedDirectoryKeys.value.map(parseDirectoryKey),
     }
     const saved = editingProject.value
@@ -132,6 +185,7 @@ async function save(): Promise<void> {
       : await props.client.create(input)
     dialogVisible.value = false
     await load()
+    expandGroup(saved.groupName)
     emit("change")
     emit("select", saved.id, saved.name)
   } catch (error) {
@@ -172,7 +226,11 @@ onMounted(() => void load())
 </script>
 
 <template>
-  <aside class="project-sidebar" aria-label="Projects">
+  <aside
+    class="project-sidebar"
+    :class="{ 'has-groups': projectGroups.length > 0 }"
+    aria-label="Projects"
+  >
     <div class="project-sidebar-heading">
       <span>Projects</span>
       <el-tooltip content="New project" placement="right">
@@ -194,7 +252,7 @@ onMounted(() => void load())
       </button>
 
       <div
-        v-for="project in projects"
+        v-for="project in ungroupedProjects"
         :key="project.id"
         class="project-navigation-row"
         :class="{ 'is-active': activeProjectId === project.id }"
@@ -233,6 +291,72 @@ onMounted(() => void load())
           </template>
         </el-dropdown>
       </div>
+
+      <section
+        v-for="group in projectGroups"
+        :key="group.key"
+        class="project-navigation-group"
+        :aria-label="group.name"
+      >
+        <button
+          type="button"
+          class="project-group-heading"
+          :aria-expanded="!isGroupCollapsed(group.key)"
+          @click="toggleGroup(group.key)"
+        >
+          <chevron-right
+            class="project-group-chevron"
+            :class="{ 'is-expanded': !isGroupCollapsed(group.key) }"
+            :size="14"
+            :stroke-width="1.8"
+          />
+          <span>{{ group.name }}</span>
+          <small>{{ group.projects.length }}</small>
+        </button>
+
+        <div v-show="!isGroupCollapsed(group.key)" class="project-group-items">
+          <div
+            v-for="project in group.projects"
+            :key="project.id"
+            class="project-navigation-row"
+            :class="{ 'is-active': activeProjectId === project.id }"
+          >
+            <button
+              type="button"
+              class="project-navigation-item"
+              @click="emit('select', project.id, project.name)"
+            >
+              <folder :size="16" :stroke-width="1.8" />
+              <span>{{ project.name }}</span>
+              <small>{{ project.directories.length }}</small>
+            </button>
+            <el-dropdown
+              trigger="click"
+              @command="handleCommand($event as string, project)"
+            >
+              <button
+                class="project-more-button"
+                type="button"
+                :aria-label="`Manage ${project.name}`"
+              >
+                <more-horizontal :size="16" :stroke-width="1.8" />
+              </button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="edit">Edit</el-dropdown-item>
+                  <el-dropdown-item
+                    command="delete"
+                    class="danger-dropdown-item"
+                    divided
+                  >
+                    Delete
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+        </div>
+      </section>
     </nav>
   </aside>
 
@@ -250,6 +374,16 @@ onMounted(() => void load())
           maxlength="128"
           placeholder="Project name"
           autofocus
+        />
+      </div>
+      <div class="project-form-field">
+        <label for="project-group">Group</label>
+        <el-input
+          id="project-group"
+          v-model="groupName"
+          maxlength="128"
+          placeholder="Optional group name"
+          clearable
         />
       </div>
       <div class="project-form-field">

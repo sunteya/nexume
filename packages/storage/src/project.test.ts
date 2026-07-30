@@ -105,6 +105,45 @@ describe("ProjectStore", () => {
     storage.close()
   })
 
+  test("persists optional group names and sorts ungrouped projects first", async () => {
+    const storage = await createStorage()
+    storage.projects.create({
+      id: "standalone",
+      name: "Standalone",
+      directories: [],
+    })
+    storage.projects.create({
+      id: "work-b",
+      name: "Beta",
+      groupName: "  Work  ",
+      directories: [],
+    })
+    storage.projects.create({
+      id: "work-a",
+      name: "Alpha",
+      groupName: "work",
+      directories: [],
+    })
+
+    expect(
+      storage.projects
+        .list()
+        .map(({ name, groupName }) => ({ name, groupName })),
+    ).toEqual([
+      { name: "Standalone", groupName: undefined },
+      { name: "Alpha", groupName: "work" },
+      { name: "Beta", groupName: "Work" },
+    ])
+    expect(
+      storage.projects.update("work-a", {
+        name: "Alpha",
+        groupName: "   ",
+        directories: [],
+      }),
+    ).toEqual(expect.not.objectContaining({ groupName: expect.anything() }))
+    storage.close()
+  })
+
   test("rejects assigning one collector directory to different projects", async () => {
     const storage = await createStorage()
     storage.projects.create({

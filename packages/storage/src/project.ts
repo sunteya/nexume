@@ -8,6 +8,7 @@ export interface ProjectDirectoryRecord {
 export interface ProjectRecord {
   id: string
   name: string
+  groupName?: string
   directories: ProjectDirectoryRecord[]
   createdAt: number
   updatedAt: number
@@ -16,12 +17,14 @@ export interface ProjectRecord {
 export interface SaveProjectInput {
   id: string
   name: string
+  groupName?: string
   directories: ProjectDirectoryRecord[]
 }
 
 interface ProjectRow {
   id: string
   name: string
+  group_name: string | null
   created_at: number
   updated_at: number
 }
@@ -34,6 +37,10 @@ interface ProjectDirectoryRow {
 
 function directoryFromRow(row: ProjectDirectoryRow): ProjectDirectoryRecord {
   return { collectorId: row.collector_id, directory: row.directory }
+}
+
+function normalizeGroupName(groupName: string | undefined): string | null {
+  return groupName?.trim() || null
 }
 
 export class ProjectStore {
@@ -55,6 +62,7 @@ export class ProjectStore {
     return {
       id: row.id,
       name: row.name,
+      ...(row.group_name ? { groupName: row.group_name } : {}),
       directories: this.directories(row.id),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -64,7 +72,11 @@ export class ProjectStore {
   list(): ProjectRecord[] {
     return this.db
       .query<ProjectRow, []>(
-        "SELECT * FROM projects ORDER BY name COLLATE NOCASE ASC, id ASC",
+        `SELECT * FROM projects
+         ORDER BY group_name IS NOT NULL ASC,
+                  group_name COLLATE NOCASE ASC,
+                  name COLLATE NOCASE ASC,
+                  id ASC`,
       )
       .all()
       .map((row) => this.fromRow(row))
@@ -83,9 +95,17 @@ export class ProjectStore {
     try {
       this.db
         .query(
-          "INSERT INTO projects (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
+          `INSERT INTO projects
+             (id, name, group_name, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?)`,
         )
-        .run(input.id, input.name.trim(), now, now)
+        .run(
+          input.id,
+          input.name.trim(),
+          normalizeGroupName(input.groupName),
+          now,
+          now,
+        )
       this.replaceDirectories(input.id, input.directories)
       this.db.exec("COMMIT")
     } catch (error) {
@@ -102,8 +122,17 @@ export class ProjectStore {
     this.db.exec("BEGIN IMMEDIATE")
     try {
       const result = this.db
-        .query("UPDATE projects SET name = ?, updated_at = ? WHERE id = ?")
-        .run(input.name.trim(), Date.now(), id)
+        .query(
+          `UPDATE projects
+           SET name = ?, group_name = ?, updated_at = ?
+           WHERE id = ?`,
+        )
+        .run(
+          input.name.trim(),
+          normalizeGroupName(input.groupName),
+          Date.now(),
+          id,
+        )
       if (result.changes === 0) {
         this.db.exec("ROLLBACK")
         return undefined

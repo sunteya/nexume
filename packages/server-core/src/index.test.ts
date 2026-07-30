@@ -1,13 +1,13 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test"
 
-import type { CollectorDescriptor } from "@nexume/contracts";
+import type { CollectorDescriptor } from "@nexume/contracts"
 
 import {
   InvalidSessionCursorError,
   createServerCore,
   type CachedSessionCatalog,
   type CachedSessionRecord,
-} from "./index";
+} from "./index"
 
 function descriptor(id: string): CollectorDescriptor {
   return {
@@ -16,7 +16,7 @@ function descriptor(id: string): CollectorDescriptor {
     hostname: `${id}.local`,
     version: "0.0.1",
     agents: ["opencode"],
-  };
+  }
 }
 
 function record(
@@ -36,7 +36,7 @@ function record(
     sourceUpdatedAt,
     sourceArchivedAt: null,
     deletedAt: null,
-  };
+  }
 }
 
 function catalog(records: CachedSessionRecord[]): CachedSessionCatalog {
@@ -48,7 +48,7 @@ function catalog(records: CachedSessionRecord[]): CachedSessionCatalog {
           (!options.agent || item.agent === options.agent) &&
           (!options.title ||
             item.title.toLowerCase().includes(options.title.toLowerCase())),
-      );
+      )
       if (options.cursor) {
         const index = items.findIndex(
           (item) =>
@@ -56,11 +56,11 @@ function catalog(records: CachedSessionRecord[]): CachedSessionCatalog {
             item.collectorId === options.cursor!.collectorId &&
             item.agent === options.cursor!.agent &&
             item.sourceId === options.cursor!.sourceId,
-        );
-        items = items.slice(index + 1);
+        )
+        items = items.slice(index + 1)
       }
-      const selected = items.slice(0, options.limit);
-      const last = selected.at(-1);
+      const selected = items.slice(0, options.limit)
+      const last = selected.at(-1)
       return {
         items: selected,
         hasMore: items.length > options.limit,
@@ -74,73 +74,73 @@ function catalog(records: CachedSessionRecord[]): CachedSessionCatalog {
               },
             }
           : {}),
-      };
+      }
     },
-  };
+  }
 }
 
 describe("createServerCore", () => {
   test("lists connected collectors and ignores stale unregister calls", () => {
-    const core = createServerCore();
+    const core = createServerCore()
     const first = core.registerCollector({
       descriptor: descriptor("remote"),
       connectionType: "remote",
-    });
+    })
     core.registerCollector({
       descriptor: { ...descriptor("remote"), name: "Replacement" },
       connectionType: "remote",
-    });
+    })
 
-    first.unregister();
-    expect(core.listCollectors()).toHaveLength(1);
-    expect(core.listCollectors()[0]?.name).toBe("Replacement");
-  });
+    first.unregister()
+    expect(core.listCollectors()).toHaveLength(1)
+    expect(core.listCollectors()[0]?.name).toBe("Replacement")
+  })
 
   test("renames a connected collector", () => {
-    const core = createServerCore();
+    const core = createServerCore()
     core.registerCollector({
       descriptor: descriptor("local"),
       connectionType: "local",
-    });
+    })
 
-    expect(core.renameCollector("local", "Renamed")).toBe(true);
-    expect(core.listCollectors()[0]?.name).toBe("Renamed");
-    expect(core.renameCollector("missing", "Ignored")).toBe(false);
-  });
+    expect(core.renameCollector("local", "Renamed")).toBe(true)
+    expect(core.listCollectors()[0]?.name).toBe("Renamed")
+    expect(core.renameCollector("missing", "Ignored")).toBe(false)
+  })
 
   test("reads cached sessions while no collector is online", async () => {
     const records = Array.from({ length: 30 }, (_, index) =>
-      record("offline", "opencode", 100 - index, index)
-    );
-    const core = createServerCore({ sessions: catalog(records) });
+      record("offline", "opencode", 100 - index, index),
+    )
+    const core = createServerCore({ sessions: catalog(records) })
 
-    const first = await core.listSessions({ limit: 20 });
+    const first = await core.listSessions({ limit: 20 })
     const second = await core.listSessions({
       limit: 20,
       cursor: first.nextCursor,
-    });
+    })
 
-    expect(core.listCollectors()).toEqual([]);
-    expect(first.items).toHaveLength(20);
-    expect(second.items).toHaveLength(10);
+    expect(core.listCollectors()).toEqual([])
+    expect(first.items).toHaveLength(20)
+    expect(second.items).toHaveLength(10)
     expect(first.items[0]).toMatchObject({
       collectorId: "offline",
       collectorName: "OFFLINE",
       id: "session-0",
-    });
-    expect(first.warnings).toEqual([]);
-  });
+    })
+    expect(first.warnings).toEqual([])
+  })
 
   test("passes collector and agent filters to the cache", async () => {
-    const calls: unknown[] = [];
+    const calls: unknown[] = []
     const core = createServerCore({
       sessions: {
         list(options) {
-          calls.push(options);
-          return { items: [], hasMore: false };
+          calls.push(options)
+          return { items: [], hasMore: false }
         },
       },
-    });
+    })
 
     await core.listSessions({
       limit: 50,
@@ -148,26 +148,28 @@ describe("createServerCore", () => {
       agent: "claude-code",
       title: "release notes",
       status: "archived",
-    });
-    expect(calls).toEqual([{
-      limit: 50,
-      collectorId: "collector-a",
-      agent: "claude-code",
-      title: "release notes",
-      status: "archived",
-      cursor: undefined,
-    }]);
-  });
+    })
+    expect(calls).toEqual([
+      {
+        limit: 50,
+        collectorId: "collector-a",
+        agent: "claude-code",
+        title: "release notes",
+        status: "archived",
+        cursor: undefined,
+      },
+    ])
+  })
 
   test("rejects a pagination cursor after filters change", async () => {
     const records = Array.from({ length: 30 }, (_, index) =>
-      record("collector-a", "opencode", 100 - index, index)
-    );
-    const core = createServerCore({ sessions: catalog(records) });
+      record("collector-a", "opencode", 100 - index, index),
+    )
+    const core = createServerCore({ sessions: catalog(records) })
     const first = await core.listSessions({
       limit: 20,
       collectorId: "collector-a",
-    });
+    })
 
     await expect(
       core.listSessions({
@@ -175,25 +177,25 @@ describe("createServerCore", () => {
         collectorId: "collector-b",
         cursor: first.nextCursor,
       }),
-    ).rejects.toBeInstanceOf(InvalidSessionCursorError);
-  });
+    ).rejects.toBeInstanceOf(InvalidSessionCursorError)
+  })
 
   test("filters titles and rejects a cursor after the title changes", async () => {
     const records = Array.from({ length: 50 }, (_, index) => ({
       ...record("collector-a", "opencode", 100 - index, index),
       title: index % 2 === 0 ? `Release ${index}` : `Draft ${index}`,
-    }));
-    const core = createServerCore({ sessions: catalog(records) });
-    const first = await core.listSessions({ limit: 20, title: "release" });
+    }))
+    const core = createServerCore({ sessions: catalog(records) })
+    const first = await core.listSessions({ limit: 20, title: "release" })
 
-    expect(first.items).toHaveLength(20);
-    expect(first.nextCursor).toBeDefined();
+    expect(first.items).toHaveLength(20)
+    expect(first.nextCursor).toBeDefined()
     await expect(
       core.listSessions({
         limit: 20,
         title: "draft",
         cursor: first.nextCursor,
       }),
-    ).rejects.toBeInstanceOf(InvalidSessionCursorError);
-  });
-});
+    ).rejects.toBeInstanceOf(InvalidSessionCursorError)
+  })
+})

@@ -1,37 +1,34 @@
-import type {
-  CollectorRuntimeMetadata,
-  RuntimeInfo,
-} from "@nexume/contracts";
+import type { CollectorRuntimeMetadata, RuntimeInfo } from "@nexume/contracts"
 import {
   CollectorSyncRunner,
   type CollectorDataSource,
-} from "@nexume/collector-core";
-import { createServerCore } from "@nexume/server-core";
-import type { AppStorage } from "@nexume/storage";
+} from "@nexume/collector-core"
+import { createServerCore } from "@nexume/server-core"
+import type { AppStorage } from "@nexume/storage"
 
-import { CollectorManagementService } from "./collector-management";
-import { createCollectorSocketServer } from "./collector-socket";
-import { createRequestHandler } from "./http";
-import { SessionSyncService } from "./session-sync";
+import { CollectorManagementService } from "./collector-management"
+import { createCollectorSocketServer } from "./collector-socket"
+import { createRequestHandler } from "./http"
+import { SessionSyncService } from "./session-sync"
 
 export interface StartServerRuntimeOptions {
-  accessToken: string;
-  storage: AppStorage;
-  hostname: string;
-  port: number;
-  webRoot: string;
-  localSources: CollectorDataSource[];
-  localMetadata: CollectorRuntimeMetadata;
-  defaultLocalCollectorName: string;
-  getRuntimeInfo?: (port: number) => RuntimeInfo;
-  onError?: (error: unknown) => void;
+  accessToken: string
+  storage: AppStorage
+  hostname: string
+  port: number
+  webRoot: string
+  localSources: CollectorDataSource[]
+  localMetadata: CollectorRuntimeMetadata
+  defaultLocalCollectorName: string
+  getRuntimeInfo?: (port: number) => RuntimeInfo
+  onError?: (error: unknown) => void
 }
 
 export function startServerRuntime(options: StartServerRuntimeOptions) {
   const core = createServerCore({
     sessions: {
       list(query) {
-        const result = options.storage.sessions.list(query);
+        const result = options.storage.sessions.list(query)
         return {
           ...result,
           items: result.items.map((item) => ({
@@ -40,11 +37,11 @@ export function startServerRuntime(options: StartServerRuntimeOptions) {
               options.storage.collectors.get(item.collectorId)?.name ??
               item.collectorId,
           })),
-        };
+        }
       },
     },
-  });
-  const sessionSync = new SessionSyncService(options.storage.sessionSync);
+  })
+  const sessionSync = new SessionSyncService(options.storage.sessionSync)
   const localSync = new CollectorSyncRunner({
     sources: options.localSources,
     onError: (_agent, error) => options.onError?.(error),
@@ -52,19 +49,19 @@ export function startServerRuntime(options: StartServerRuntimeOptions) {
       begin: async (request) => sessionSync.begin("local", request),
       commit: async (request) => sessionSync.commit("local", request),
     },
-  });
+  })
   const collectors = new CollectorManagementService({
     collectors: options.storage.collectors,
     core,
     localMetadata: options.localMetadata,
     onLocalCollectorChanged(enabled) {
-      if (enabled) localSync.start();
-      else localSync.stop();
+      if (enabled) localSync.start()
+      else localSync.stop()
     },
-  });
+  })
 
   if (options.storage.initialization.getStatus().initialized) {
-    collectors.syncLocalCollector();
+    collectors.syncLocalCollector()
   }
 
   const collectorSockets = createCollectorSocketServer({
@@ -76,17 +73,17 @@ export function startServerRuntime(options: StartServerRuntimeOptions) {
     onTouched: (id) => collectors.touched(id),
     isInitialized: () => options.storage.initialization.getStatus().initialized,
     onError: options.onError,
-  });
-  collectors.setRemoteDisconnect(collectorSockets.disconnectCollector);
+  })
+  collectors.setRemoteDisconnect(collectorSockets.disconnectCollector)
   collectors.setSyncTrigger((id) => {
     if (id === "local") {
-      void localSync.syncNow();
-      return true;
+      void localSync.syncNow()
+      return true
     }
-    return collectorSockets.syncCollector(id);
-  });
-  const collectorSocketHandler = collectorSockets.engine.handler();
-  let server: ReturnType<typeof Bun.serve>;
+    return collectorSockets.syncCollector(id)
+  })
+  const collectorSocketHandler = collectorSockets.engine.handler()
+  let server: ReturnType<typeof Bun.serve>
 
   const handler = createRequestHandler({
     accessToken: options.accessToken,
@@ -98,20 +95,21 @@ export function startServerRuntime(options: StartServerRuntimeOptions) {
           localCollector: initializeLocalCollector
             ? { id: "local", name: options.defaultLocalCollectorName }
             : undefined,
-        });
-        collectors.syncLocalCollector();
-        return status;
+        })
+        collectors.syncLocalCollector()
+        return status
       },
     },
     collectors,
-    getRuntimeInfo: () => options.getRuntimeInfo?.(server.port ?? options.port) ?? {
-      kind: "server",
-      port: server.port ?? options.port,
-      urls: [],
-    },
+    getRuntimeInfo: () =>
+      options.getRuntimeInfo?.(server.port ?? options.port) ?? {
+        kind: "server",
+        port: server.port ?? options.port,
+        urls: [],
+      },
     webRoot: options.webRoot,
     onError: options.onError,
-  });
+  })
 
   server = Bun.serve({
     ...collectorSocketHandler,
@@ -121,10 +119,10 @@ export function startServerRuntime(options: StartServerRuntimeOptions) {
     fetch(request, bunServer) {
       return new URL(request.url).pathname.startsWith("/socket.io/")
         ? collectorSocketHandler.fetch(request, bunServer)
-        : handler(request);
+        : handler(request)
     },
     error(error) {
-      options.onError?.(error);
+      options.onError?.(error)
       return Response.json(
         {
           error: {
@@ -133,26 +131,26 @@ export function startServerRuntime(options: StartServerRuntimeOptions) {
           },
         },
         { status: 500 },
-      );
+      )
     },
-  });
+  })
 
-  let closing: Promise<void> | undefined;
+  let closing: Promise<void> | undefined
   return {
     server,
     core,
     collectors,
     createBootstrapUrl(host = "127.0.0.1"): string {
-      return `http://${host}:${server.port ?? options.port}/#accessToken=${encodeURIComponent(options.accessToken)}`;
+      return `http://${host}:${server.port ?? options.port}/#accessToken=${encodeURIComponent(options.accessToken)}`
     },
     close(): Promise<void> {
-      if (closing) return closing;
+      if (closing) return closing
       closing = Promise.resolve().then(async () => {
-        localSync.stop();
-        await collectorSockets.close();
-        await server.stop(true);
-      });
-      return closing;
+        localSync.stop()
+        await collectorSockets.close()
+        await server.stop(true)
+      })
+      return closing
     },
-  };
+  }
 }

@@ -1,37 +1,38 @@
-import { randomBytes } from "node:crypto";
-import { hostname, networkInterfaces } from "node:os";
-import { resolve } from "node:path";
+import { randomBytes } from "node:crypto"
+import { hostname, networkInterfaces } from "node:os"
+import { resolve } from "node:path"
 
-import Electrobun, { BrowserWindow, Utils } from "electrobun/bun";
+import Electrobun, { BrowserWindow, Utils } from "electrobun/bun"
 
-import { AlmaCollector, OpenCodeCollector } from "@nexume/collector-core";
-import { startServerRuntime } from "@nexume/server-runtime";
-import { openStorage } from "@nexume/storage";
-import packageJson from "../../package.json";
+import { AlmaCollector, OpenCodeCollector } from "@nexume/collector-core"
+import { startServerRuntime } from "@nexume/server-runtime"
+import { openStorage } from "@nexume/storage"
+import packageJson from "../../package.json"
 
-const port = 0;
-const storage = await openStorage({ dataDir: Utils.paths.userData });
+const port = 0
+const storage = await openStorage({ dataDir: Utils.paths.userData })
 const sources = [
   new OpenCodeCollector({ databasePath: process.env.OPENCODE_DB_PATH }),
   new AlmaCollector({ databasePath: process.env.ALMA_DB_PATH }),
-];
-const accessToken = `nxa_${randomBytes(32).toString("base64url")}`;
+]
+const accessToken = `nxa_${randomBytes(32).toString("base64url")}`
 
 if (
   storage.initialization.getStatus().initialized &&
   storage.collectors.get("local")?.name === "Server Local"
 ) {
-  storage.collectors.updateName("local", "Desktop Local");
+  storage.collectors.updateName("local", "Desktop Local")
 }
 
 function desktopUrls(actualPort: number): string[] {
-  const addresses = new Set(["127.0.0.1"]);
+  const addresses = new Set(["127.0.0.1"])
   for (const entries of Object.values(networkInterfaces())) {
     for (const entry of entries ?? []) {
-      if (entry.family === "IPv4" && !entry.internal) addresses.add(entry.address);
+      if (entry.family === "IPv4" && !entry.internal)
+        addresses.add(entry.address)
     }
   }
-  return [...addresses].map((address) => `http://${address}:${actualPort}`);
+  return [...addresses].map((address) => `http://${address}:${actualPort}`)
 }
 
 const runtime = startServerRuntime({
@@ -53,18 +54,21 @@ const runtime = startServerRuntime({
     urls: desktopUrls(actualPort),
   }),
   onError: (error) => console.error(error),
-});
+})
 
-let allowingQuit = false;
-Electrobun.events.on("before-quit", (event: { response: { allow: boolean } }) => {
-  if (allowingQuit) return;
-  event.response = { allow: false };
-  void runtime.close().finally(() => {
-    storage.close();
-    allowingQuit = true;
-    Utils.quit();
-  });
-});
+let allowingQuit = false
+Electrobun.events.on(
+  "before-quit",
+  (event: { response: { allow: boolean } }) => {
+    if (allowingQuit) return
+    event.response = { allow: false }
+    void runtime.close().finally(() => {
+      storage.close()
+      allowingQuit = true
+      Utils.quit()
+    })
+  },
+)
 
 new BrowserWindow({
   title: "Nexume",
@@ -75,6 +79,6 @@ new BrowserWindow({
     x: 160,
     y: 120,
   },
-});
+})
 
-console.log(`Nexume Desktop: http://0.0.0.0:${runtime.server.port ?? port}`);
+console.log(`Nexume Desktop: http://0.0.0.0:${runtime.server.port ?? port}`)

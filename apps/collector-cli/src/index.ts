@@ -1,31 +1,31 @@
-import { hostname } from "node:os";
+import { hostname } from "node:os"
 
 import {
   AlmaCollector,
   CollectorConnection,
   OpenCodeCollector,
-} from "@nexume/collector-core";
-import packageJson from "../package.json";
+} from "@nexume/collector-core"
+import packageJson from "../package.json"
 
 import {
   CollectorCliUsageError,
   parseCollectorCliOptions,
   type CollectorCliOptions,
-} from "./options";
+} from "./options"
 
-let options: CollectorCliOptions;
+let options: CollectorCliOptions
 try {
-  options = parseCollectorCliOptions(process.argv.slice(2));
+  options = parseCollectorCliOptions(process.argv.slice(2))
 } catch (error) {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(message);
-  process.exit(error instanceof CollectorCliUsageError ? 2 : 1);
+  const message = error instanceof Error ? error.message : String(error)
+  console.error(message)
+  process.exit(error instanceof CollectorCliUsageError ? 2 : 1)
 }
 
 const sources = [
   new OpenCodeCollector({ databasePath: options.databasePath }),
   new AlmaCollector({ databasePath: options.almaDatabasePath }),
-];
+]
 const connection = new CollectorConnection({
   serverUrl: options.serverUrl,
   token: options.token,
@@ -36,28 +36,26 @@ const connection = new CollectorConnection({
   },
   sources,
   onStateChange(state, detail) {
-    console.log(
-      `[collector] ${state}${detail ? `: ${detail}` : ""}`,
-    );
+    console.log(`[collector] ${state}${detail ? `: ${detail}` : ""}`)
   },
   onSyncError(agent, error) {
-    console.error(`[collector] ${agent} sync failed:`, error);
+    console.error(`[collector] ${agent} sync failed:`, error)
   },
-});
+})
 
 for (const source of sources) {
   console.log(
     source.available
       ? `[collector] ${source.agent}: ${source.databasePath}`
       : `[collector] ${source.agent} database is unavailable: ${source.databasePath}`,
-  );
+  )
 }
-connection.connect();
+connection.connect()
 
 function stop(): void {
-  connection.disconnect();
-  process.exit(0);
+  connection.disconnect()
+  process.exit(0)
 }
 
-process.once("SIGINT", stop);
-process.once("SIGTERM", stop);
+process.once("SIGINT", stop)
+process.once("SIGTERM", stop)

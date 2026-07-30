@@ -1,29 +1,33 @@
-import { mkdirSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { mkdirSync } from "node:fs"
+import { join, resolve } from "node:path"
 
-import { Database } from "bun:sqlite";
-import { Umzug, type RunnableMigration } from "umzug";
+import { Database } from "bun:sqlite"
+import { Umzug, type RunnableMigration } from "umzug"
 
-import { InitializationService } from "./initialization";
-import { CollectorStore } from "./collector";
-import { SqliteMigrationStorage } from "./migration-storage";
-import { migrations, type MigrationContext } from "./migrations";
-import { SessionStore } from "./session";
-import { SessionSyncStore } from "./session-sync";
+import { InitializationService } from "./initialization"
+import { CollectorStore } from "./collector"
+import { SqliteMigrationStorage } from "./migration-storage"
+import { migrations, type MigrationContext } from "./migrations"
+import { SessionStore } from "./session"
+import { SessionSyncStore } from "./session-sync"
 
 export {
   AlreadyInitializedError,
   InitializationService,
   type CompleteInitializationOptions,
-} from "./initialization";
-export { defineMigration, type MigrationContext } from "./migrations";
-export { SettingsStore, type SettingKey, type SettingValueMap } from "./settings";
+} from "./initialization"
+export { defineMigration, type MigrationContext } from "./migrations"
+export {
+  SettingsStore,
+  type SettingKey,
+  type SettingValueMap,
+} from "./settings"
 export {
   CollectorStore,
   type CollectorRecord,
   type CollectorRuntime,
   type CreateCollectorInput,
-} from "./collector";
+} from "./collector"
 export {
   SessionStore,
   type AgentId,
@@ -33,7 +37,7 @@ export {
   type SessionListResult,
   type SessionRecord,
   type SessionStatus,
-} from "./session";
+} from "./session"
 export {
   SessionSyncStore,
   type BeginSessionSyncInput,
@@ -43,22 +47,22 @@ export {
   type SessionSyncItem,
   type SessionSyncMode,
   type SessionSyncState,
-} from "./session-sync";
+} from "./session-sync"
 
 export interface OpenStorageOptions {
-  dataDir: string;
+  dataDir: string
 }
 
 export interface AppStorage {
-  dataDir: string;
-  cacheDir: string;
-  databasePath: string;
-  db: Database;
-  initialization: InitializationService;
-  collectors: CollectorStore;
-  sessions: SessionStore;
-  sessionSync: SessionSyncStore;
-  close(): void;
+  dataDir: string
+  cacheDir: string
+  databasePath: string
+  db: Database
+  initialization: InitializationService
+  collectors: CollectorStore
+  sessions: SessionStore
+  sessionSync: SessionSyncStore
+  close(): void
 }
 
 function trackedMigrations(
@@ -68,21 +72,21 @@ function trackedMigrations(
   return runnable.map((migration) => ({
     name: migration.name,
     async up(params) {
-      context.db.exec("BEGIN IMMEDIATE");
+      context.db.exec("BEGIN IMMEDIATE")
       try {
-        await migration.up(params);
+        await migration.up(params)
         context.db
           .query(
             "INSERT INTO system_migrations (name, executed_at) VALUES (?, ?)",
           )
-          .run(migration.name, Date.now());
-        context.db.exec("COMMIT");
+          .run(migration.name, Date.now())
+        context.db.exec("COMMIT")
       } catch (error) {
-        context.db.exec("ROLLBACK");
-        throw error;
+        context.db.exec("ROLLBACK")
+        throw error
       }
     },
-  }));
+  }))
 }
 
 export async function runMigrations(
@@ -94,30 +98,30 @@ export async function runMigrations(
     context,
     storage: new SqliteMigrationStorage(context.db),
     logger: undefined,
-  });
-  await migrator.up();
+  })
+  await migrator.up()
 }
 
 export async function openStorage(
   options: OpenStorageOptions,
 ): Promise<AppStorage> {
-  const dataDir = resolve(options.dataDir);
-  const cacheDir = join(dataDir, "cache");
-  const databasePath = join(dataDir, "nexume.sqlite");
-  mkdirSync(cacheDir, { recursive: true });
+  const dataDir = resolve(options.dataDir)
+  const cacheDir = join(dataDir, "cache")
+  const databasePath = join(dataDir, "nexume.sqlite")
+  mkdirSync(cacheDir, { recursive: true })
 
-  const db = new Database(databasePath, { create: true, strict: true });
-  db.exec("PRAGMA foreign_keys = ON");
-  db.exec("PRAGMA journal_mode = WAL");
-  db.exec("PRAGMA busy_timeout = 5000");
+  const db = new Database(databasePath, { create: true, strict: true })
+  db.exec("PRAGMA foreign_keys = ON")
+  db.exec("PRAGMA journal_mode = WAL")
+  db.exec("PRAGMA busy_timeout = 5000")
 
   try {
-    const context: MigrationContext = { db, dataDir, cacheDir };
-    await runMigrations(context);
+    const context: MigrationContext = { db, dataDir, cacheDir }
+    await runMigrations(context)
 
-    const collectors = new CollectorStore(db);
-    const sessions = new SessionStore(db);
-    const sessionSync = new SessionSyncStore(db);
+    const collectors = new CollectorStore(db)
+    const sessions = new SessionStore(db)
+    const sessionSync = new SessionSyncStore(db)
     return {
       dataDir,
       cacheDir,
@@ -128,9 +132,9 @@ export async function openStorage(
       sessions,
       sessionSync,
       close: () => db.close(),
-    };
+    }
   } catch (error) {
-    db.close();
-    throw error;
+    db.close()
+    throw error
   }
 }

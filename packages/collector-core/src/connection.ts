@@ -1,4 +1,4 @@
-import { io, type Socket } from "socket.io-client";
+import { io, type Socket } from "socket.io-client"
 
 import type {
   BeginSessionSyncResponse,
@@ -7,56 +7,55 @@ import type {
   CollectorToServerEvents,
   ServerToCollectorEvents,
   SessionSyncBatchResponse,
-} from "@nexume/contracts";
+} from "@nexume/contracts"
 
-import type { CollectorDataSource } from "./source";
-import { CollectorSyncRunner } from "./sync-runner";
+import type { CollectorDataSource } from "./source"
+import { CollectorSyncRunner } from "./sync-runner"
 
 export type CollectorConnectionState =
-  | "disconnected"
-  | "connecting"
-  | "connected";
+  "disconnected" | "connecting" | "connected"
 
 export interface CollectorConnectionOptions {
-  serverUrl: string;
-  token: string;
-  metadata: CollectorRuntimeMetadata;
-  sources: CollectorDataSource[];
-  syncIntervalMs?: number;
-  onStateChange?: (state: CollectorConnectionState, detail?: string) => void;
-  onSyncError?: (agent: string, error: unknown) => void;
+  serverUrl: string
+  token: string
+  metadata: CollectorRuntimeMetadata
+  sources: CollectorDataSource[]
+  syncIntervalMs?: number
+  onStateChange?: (state: CollectorConnectionState, detail?: string) => void
+  onSyncError?: (agent: string, error: unknown) => void
 }
 
-type CollectorSocket = Socket<ServerToCollectorEvents, CollectorToServerEvents>;
+type CollectorSocket = Socket<ServerToCollectorEvents, CollectorToServerEvents>
 
 function responseData<T>(
   response: { ok: true; data: T } | { ok: false; error: { message: string } },
 ): T {
-  if (!response?.ok) throw new Error(response?.error.message ?? "Server 返回无效响应。");
-  return response.data;
+  if (!response?.ok)
+    throw new Error(response?.error.message ?? "Server 返回无效响应。")
+  return response.data
 }
 
 export class CollectorConnection {
-  readonly socket: CollectorSocket;
-  private heartbeat?: ReturnType<typeof setInterval>;
-  private readonly runner: CollectorSyncRunner;
+  readonly socket: CollectorSocket
+  private heartbeat?: ReturnType<typeof setInterval>
+  private readonly runner: CollectorSyncRunner
 
   constructor(private readonly options: CollectorConnectionOptions) {
-    const sourceAgents = new Set<string>();
+    const sourceAgents = new Set<string>()
     for (const source of options.sources) {
       if (!options.metadata.agents.includes(source.agent)) {
-        throw new Error(`Collector metadata 未声明 ${source.agent} Agent。`);
+        throw new Error(`Collector metadata 未声明 ${source.agent} Agent。`)
       }
       if (sourceAgents.has(source.agent)) {
-        throw new Error(`Collector 包含重复的 ${source.agent} Agent 数据源。`);
+        throw new Error(`Collector 包含重复的 ${source.agent} Agent 数据源。`)
       }
-      sourceAgents.add(source.agent);
+      sourceAgents.add(source.agent)
     }
-    const serverUrl = options.serverUrl.replace(/\/$/, "");
+    const serverUrl = options.serverUrl.replace(/\/$/, "")
     const auth: CollectorSocketAuth = {
       token: options.token,
       metadata: options.metadata,
-    };
+    }
     this.socket = io(serverUrl, {
       path: "/socket.io",
       autoConnect: false,
@@ -64,65 +63,71 @@ export class CollectorConnection {
       reconnectionDelay: 1_000,
       reconnectionDelayMax: 30_000,
       auth,
-    });
+    })
     this.runner = new CollectorSyncRunner({
       sources: options.sources,
       intervalMs: options.syncIntervalMs,
       onError: options.onSyncError,
       target: {
         begin: async (request) => {
-          const response = await this.socket
+          const response = (await this.socket
             .timeout(10_000)
-            .emitWithAck("sessions:sync:begin", request) as BeginSessionSyncResponse;
-          return responseData(response);
+            .emitWithAck(
+              "sessions:sync:begin",
+              request,
+            )) as BeginSessionSyncResponse
+          return responseData(response)
         },
         commit: async (request) => {
-          const response = await this.socket
+          const response = (await this.socket
             .timeout(10_000)
-            .emitWithAck("sessions:sync:batch", request) as SessionSyncBatchResponse;
-          return responseData(response);
+            .emitWithAck(
+              "sessions:sync:batch",
+              request,
+            )) as SessionSyncBatchResponse
+          return responseData(response)
         },
       },
-    });
+    })
 
     this.socket.on("connect", () => {
-      options.onStateChange?.("connected");
-      this.sendStatus();
-      this.heartbeat = setInterval(() => this.sendStatus(), 30_000);
-      this.runner.start();
-    });
+      options.onStateChange?.("connected")
+      this.sendStatus()
+      this.heartbeat = setInterval(() => this.sendStatus(), 30_000)
+      this.runner.start()
+    })
     this.socket.on("disconnect", (reason) => {
-      this.clearTimers();
-      options.onStateChange?.("disconnected", reason);
-    });
+      this.clearTimers()
+      options.onStateChange?.("disconnected", reason)
+    })
     this.socket.on("connect_error", (error) => {
-      options.onStateChange?.("disconnected", error.message);
-    });
+      options.onStateChange?.("disconnected", error.message)
+    })
     this.socket.on("sessions:sync:request", () => {
-      void this.runner.syncNow();
-    });
+      void this.runner.syncNow()
+    })
   }
 
   connect(): void {
-    if (this.socket.connected || this.socket.active) return;
-    this.options.onStateChange?.("connecting");
-    this.socket.connect();
+    if (this.socket.connected || this.socket.active) return
+    this.options.onStateChange?.("connecting")
+    this.socket.connect()
   }
 
   disconnect(): void {
-    this.clearTimers();
-    this.socket.disconnect();
+    this.clearTimers()
+    this.socket.disconnect()
   }
 
   private sendStatus(): void {
     this.socket.emit("collector:status", {
       available: this.options.sources.some((source) => source.available),
-    });
+    })
   }
 
   private clearTimers(): void {
-    if (this.heartbeat) clearInterval(this.heartbeat);
-    this.heartbeat = undefined;
-    this.runner.stop();
+    if (this.heartbeat) clearInterval(this.heartbeat)
+    this.heartbeat = undefined
+    this.runner.stop()
   }
 }

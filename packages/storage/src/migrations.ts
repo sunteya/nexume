@@ -1,22 +1,22 @@
 /// <reference path="./env.d.ts" />
 
-import type { Database } from "bun:sqlite";
-import type { RunnableMigration } from "umzug";
+import type { Database } from "bun:sqlite"
+import type { RunnableMigration } from "umzug"
 
-import initialSql from "./migrations/0001_initial.sql" with { type: "text" };
-import collectorsSql from "./migrations/0002_collectors.sql" with { type: "text" };
-import sessionsSql from "./migrations/0003_sessions.sql" with { type: "text" };
+import initialSql from "./migrations/0001_initial.sql" with { type: "text" }
+import collectorsSql from "./migrations/0002_collectors.sql" with { type: "text" }
+import sessionsSql from "./migrations/0003_sessions.sql" with { type: "text" }
 
 export interface MigrationContext {
-  db: Database;
-  dataDir: string;
-  cacheDir: string;
+  db: Database
+  dataDir: string
+  cacheDir: string
 }
 
 export function defineMigration(
   migration: RunnableMigration<MigrationContext>,
 ): RunnableMigration<MigrationContext> {
-  return migration;
+  return migration
 }
 
 function sqlMigration(
@@ -26,13 +26,13 @@ function sqlMigration(
   return {
     name,
     async up({ context }) {
-      context.db.exec(sql);
+      context.db.exec(sql)
     },
-  };
+  }
 }
 
 export const migrations: RunnableMigration<MigrationContext>[] = [
   sqlMigration("0001_initial", initialSql),
   sqlMigration("0002_collectors", collectorsSql),
   sqlMigration("0003_sessions", sessionsSql),
-];
+]

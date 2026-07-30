@@ -1,8 +1,8 @@
-import vue from "@vitejs/plugin-vue";
-import { defineConfig } from "vite";
-import ElementPlus from "unplugin-element-plus/vite";
+import vue from "@vitejs/plugin-vue"
+import { defineConfig } from "vite"
+import ElementPlus from "unplugin-element-plus/vite"
 
-const apiPort = Number(process.env.PORT ?? 3000);
+const apiPort = Number(process.env.PORT ?? 3000)
 
 export default defineConfig({
   plugins: [vue(), ElementPlus({})],
@@ -18,4 +18,4 @@ export default defineConfig({
       "/api": `http://127.0.0.1:${apiPort}`,
     },
   },
-});
+})

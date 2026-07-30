@@ -1,33 +1,33 @@
-import { resolve } from "node:path";
-import { hostname as getHostname } from "node:os";
+import { resolve } from "node:path"
+import { hostname as getHostname } from "node:os"
 
-import { AlmaCollector, OpenCodeCollector } from "@nexume/collector-core";
-import { startServerRuntime } from "@nexume/server-runtime";
-import { openStorage } from "@nexume/storage";
-import packageJson from "../package.json";
+import { AlmaCollector, OpenCodeCollector } from "@nexume/collector-core"
+import { startServerRuntime } from "@nexume/server-runtime"
+import { openStorage } from "@nexume/storage"
+import packageJson from "../package.json"
 
 function readPort(value: string | undefined): number {
-  const port = Number(value ?? 3000);
+  const port = Number(value ?? 3000)
 
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {
-    throw new Error("PORT 必须是 1 到 65535 之间的整数。");
+    throw new Error("PORT 必须是 1 到 65535 之间的整数。")
   }
 
-  return port;
+  return port
 }
 
-const accessToken = process.env.NEXUME_ACCESS_TOKEN?.trim();
+const accessToken = process.env.NEXUME_ACCESS_TOKEN?.trim()
 if (!accessToken) {
-  throw new Error("启动 Server 前必须设置 NEXUME_ACCESS_TOKEN。");
+  throw new Error("启动 Server 前必须设置 NEXUME_ACCESS_TOKEN。")
 }
-const hostname = process.env.HOST?.trim() || "0.0.0.0";
-const port = readPort(process.env.PORT);
-const dataDir = resolve(process.env.NEXUME_DATA_DIR?.trim() || "data");
-const storage = await openStorage({ dataDir });
+const hostname = process.env.HOST?.trim() || "0.0.0.0"
+const port = readPort(process.env.PORT)
+const dataDir = resolve(process.env.NEXUME_DATA_DIR?.trim() || "data")
+const storage = await openStorage({ dataDir })
 const sources = [
   new OpenCodeCollector({ databasePath: process.env.OPENCODE_DB_PATH }),
   new AlmaCollector({ databasePath: process.env.ALMA_DB_PATH }),
-];
+]
 const runtime = startServerRuntime({
   accessToken,
   storage,
@@ -47,23 +47,23 @@ const runtime = startServerRuntime({
     urls: [`http://${hostname}:${actualPort}`],
   }),
   onError: (error) => console.error(error),
-});
+})
 
-console.log(`Nexume Server: http://${hostname}:${runtime.server.port}`);
-console.log(`Data: ${storage.dataDir}`);
+console.log(`Nexume Server: http://${hostname}:${runtime.server.port}`)
+console.log(`Data: ${storage.dataDir}`)
 for (const source of sources) {
   console.log(
     source.available
       ? `${source.agent}: ${source.databasePath}`
       : `${source.agent} 数据库暂不可用: ${source.databasePath}`,
-  );
+  )
 }
 
 async function stop(): Promise<void> {
-  await runtime.close();
-  storage.close();
-  process.exit(0);
+  await runtime.close()
+  storage.close()
+  process.exit(0)
 }
 
-process.once("SIGINT", () => void stop());
-process.once("SIGTERM", () => void stop());
+process.once("SIGINT", () => void stop())
+process.once("SIGTERM", () => void stop())

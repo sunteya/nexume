@@ -1,58 +1,58 @@
-import type { Database, SQLQueryBindings } from "bun:sqlite";
+import type { Database, SQLQueryBindings } from "bun:sqlite"
 
-export type AgentId = string;
-export type SessionStatus = "active" | "archived" | "deleted";
+export type AgentId = string
+export type SessionStatus = "active" | "archived" | "deleted"
 
 export interface SessionKey {
-  collectorId: string;
-  agent: AgentId;
-  sourceId: string;
+  collectorId: string
+  agent: AgentId
+  sourceId: string
 }
 
 export interface SessionRecord extends SessionKey {
-  title: string;
-  directory: string;
-  sourceCreatedAt: number;
-  sourceUpdatedAt: number;
-  sourceArchivedAt: number | null;
-  deletedAt: number | null;
-  firstSeenAt: number;
-  lastSyncedAt: number;
-  lastReconcileId: string | null;
+  title: string
+  directory: string
+  sourceCreatedAt: number
+  sourceUpdatedAt: number
+  sourceArchivedAt: number | null
+  deletedAt: number | null
+  firstSeenAt: number
+  lastSyncedAt: number
+  lastReconcileId: string | null
 }
 
 export interface SessionListCursor extends SessionKey {
-  sourceUpdatedAt: number;
+  sourceUpdatedAt: number
 }
 
 export interface ListSessionsOptions {
-  collectorId?: string;
-  agent?: AgentId;
-  title?: string;
-  status?: SessionStatus;
-  limit: number;
-  cursor?: SessionListCursor;
+  collectorId?: string
+  agent?: AgentId
+  title?: string
+  status?: SessionStatus
+  limit: number
+  cursor?: SessionListCursor
 }
 
 export interface SessionListResult {
-  items: SessionRecord[];
-  hasMore: boolean;
-  nextCursor?: SessionListCursor;
+  items: SessionRecord[]
+  hasMore: boolean
+  nextCursor?: SessionListCursor
 }
 
 interface SessionRow {
-  collector_id: string;
-  agent: string;
-  source_id: string;
-  title: string;
-  directory: string;
-  source_created_at: number;
-  source_updated_at: number;
-  source_archived_at: number | null;
-  deleted_at: number | null;
-  first_seen_at: number;
-  last_synced_at: number;
-  last_reconcile_id: string | null;
+  collector_id: string
+  agent: string
+  source_id: string
+  title: string
+  directory: string
+  source_created_at: number
+  source_updated_at: number
+  source_archived_at: number | null
+  deleted_at: number | null
+  first_seen_at: number
+  last_synced_at: number
+  last_reconcile_id: string | null
 }
 
 function fromRow(row: SessionRow): SessionRecord {
@@ -69,7 +69,7 @@ function fromRow(row: SessionRow): SessionRecord {
     firstSeenAt: row.first_seen_at,
     lastSyncedAt: row.last_synced_at,
     lastReconcileId: row.last_reconcile_id,
-  };
+  }
 }
 
 function toCursor(session: SessionRecord): SessionListCursor {
@@ -78,7 +78,7 @@ function toCursor(session: SessionRecord): SessionListCursor {
     collectorId: session.collectorId,
     agent: session.agent,
     sourceId: session.sourceId,
-  };
+  }
 }
 
 export class SessionStore {
@@ -90,39 +90,39 @@ export class SessionStore {
         `SELECT * FROM sessions
          WHERE collector_id = ? AND agent = ? AND source_id = ?`,
       )
-      .get(key.collectorId, key.agent, key.sourceId);
-    return row ? fromRow(row) : undefined;
+      .get(key.collectorId, key.agent, key.sourceId)
+    return row ? fromRow(row) : undefined
   }
 
   list(options: ListSessionsOptions): SessionListResult {
     if (!Number.isSafeInteger(options.limit) || options.limit <= 0) {
-      throw new Error("Session list limit must be a positive safe integer.");
+      throw new Error("Session list limit must be a positive safe integer.")
     }
 
-    const conditions: string[] = [];
-    const bindings: SQLQueryBindings[] = [];
+    const conditions: string[] = []
+    const bindings: SQLQueryBindings[] = []
     if (options.collectorId !== undefined) {
-      conditions.push("collector_id = ?");
-      bindings.push(options.collectorId);
+      conditions.push("collector_id = ?")
+      bindings.push(options.collectorId)
     }
     if (options.agent !== undefined) {
-      conditions.push("agent = ?");
-      bindings.push(options.agent);
+      conditions.push("agent = ?")
+      bindings.push(options.agent)
     }
     if (options.title !== undefined) {
-      conditions.push("instr(lower(title), lower(?)) > 0");
-      bindings.push(options.title);
+      conditions.push("instr(lower(title), lower(?)) > 0")
+      bindings.push(options.title)
     }
 
-    const status = options.status ?? "active";
+    const status = options.status ?? "active"
     if (status === "active") {
-      conditions.push("source_archived_at IS NULL", "deleted_at IS NULL");
+      conditions.push("source_archived_at IS NULL", "deleted_at IS NULL")
     } else if (status === "archived") {
-      conditions.push("source_archived_at IS NOT NULL", "deleted_at IS NULL");
+      conditions.push("source_archived_at IS NOT NULL", "deleted_at IS NULL")
     } else if (status === "deleted") {
-      conditions.push("deleted_at IS NOT NULL");
+      conditions.push("deleted_at IS NOT NULL")
     } else {
-      throw new Error(`Unsupported session status: ${String(status)}`);
+      throw new Error(`Unsupported session status: ${String(status)}`)
     }
 
     if (options.cursor) {
@@ -131,7 +131,7 @@ export class SessionStore {
         (source_updated_at = ? AND collector_id > ?) OR
         (source_updated_at = ? AND collector_id = ? AND agent > ?) OR
         (source_updated_at = ? AND collector_id = ? AND agent = ? AND source_id > ?)
-      )`);
+      )`)
       bindings.push(
         options.cursor.sourceUpdatedAt,
         options.cursor.sourceUpdatedAt,
@@ -143,10 +143,10 @@ export class SessionStore {
         options.cursor.collectorId,
         options.cursor.agent,
         options.cursor.sourceId,
-      );
+      )
     }
 
-    bindings.push(options.limit + 1);
+    bindings.push(options.limit + 1)
     const rows = this.db
       .query<SessionRow, SQLQueryBindings[]>(
         `SELECT * FROM sessions
@@ -154,15 +154,15 @@ export class SessionStore {
          ORDER BY source_updated_at DESC, collector_id ASC, agent ASC, source_id ASC
          LIMIT ?`,
       )
-      .all(...bindings);
-    const hasMore = rows.length > options.limit;
-    const items = rows.slice(0, options.limit).map(fromRow);
-    const last = items.at(-1);
+      .all(...bindings)
+    const hasMore = rows.length > options.limit
+    const items = rows.slice(0, options.limit).map(fromRow)
+    const last = items.at(-1)
 
     return {
       items,
       hasMore,
       ...(hasMore && last ? { nextCursor: toCursor(last) } : {}),
-    };
+    }
   }
 }

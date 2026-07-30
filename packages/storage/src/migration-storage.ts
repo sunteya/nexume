@@ -1,8 +1,8 @@
-import type { Database } from "bun:sqlite";
-import type { UmzugStorage } from "umzug";
+import type { Database } from "bun:sqlite"
+import type { UmzugStorage } from "umzug"
 
 interface MigrationRow {
-  name: string;
+  name: string
 }
 
 export class SqliteMigrationStorage implements UmzugStorage {
@@ -12,7 +12,7 @@ export class SqliteMigrationStorage implements UmzugStorage {
         name TEXT PRIMARY KEY NOT NULL,
         executed_at INTEGER NOT NULL
       ) STRICT
-    `);
+    `)
   }
 
   async executed(): Promise<string[]> {
@@ -21,7 +21,7 @@ export class SqliteMigrationStorage implements UmzugStorage {
         "SELECT name FROM system_migrations ORDER BY name ASC",
       )
       .all()
-      .map((row) => row.name);
+      .map((row) => row.name)
   }
 
   async logMigration({ name }: { name: string }): Promise<void> {
@@ -29,10 +29,10 @@ export class SqliteMigrationStorage implements UmzugStorage {
       .query(
         "INSERT OR IGNORE INTO system_migrations (name, executed_at) VALUES (?, ?)",
       )
-      .run(name, Date.now());
+      .run(name, Date.now())
   }
 
   async unlogMigration(): Promise<void> {
-    throw new Error("Nexume migration 仅支持向前执行。");
+    throw new Error("Nexume migration 仅支持向前执行。")
   }
 }

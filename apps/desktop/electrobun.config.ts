@@ -1,4 +1,4 @@
-import type { ElectrobunConfig } from "electrobun";
+import type { ElectrobunConfig } from "electrobun"
 
 export default {
   app: {
@@ -27,4 +27,4 @@ export default {
   release: {
     generatePatch: false,
   },
-} satisfies ElectrobunConfig;
+} satisfies ElectrobunConfig

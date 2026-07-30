@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto"
 
 import {
   assertBeginSessionSyncRequest,
@@ -7,16 +7,16 @@ import {
   type BeginSessionSyncResult,
   type SessionSyncBatchRequest,
   type SessionSyncBatchResult,
-} from "@nexume/contracts";
-import type { SessionSyncStore } from "@nexume/storage";
+} from "@nexume/contracts"
+import type { SessionSyncStore } from "@nexume/storage"
 
 interface ActiveRun {
-  runId: string;
-  checkpointFormat: string;
+  runId: string
+  checkpointFormat: string
 }
 
 export class SessionSyncService {
-  private readonly runs = new Map<string, ActiveRun>();
+  private readonly runs = new Map<string, ActiveRun>()
 
   constructor(
     private readonly store: SessionSyncStore,
@@ -27,30 +27,30 @@ export class SessionSyncService {
     collectorId: string,
     request: BeginSessionSyncRequest,
   ): BeginSessionSyncResult {
-    assertBeginSessionSyncRequest(request);
-    const current = this.store.get(collectorId, request.agent);
+    assertBeginSessionSyncRequest(request)
+    const current = this.store.get(collectorId, request.agent)
     const checkpointMatches =
-      current?.checkpoint?.format === request.checkpointFormat;
+      current?.checkpoint?.format === request.checkpointFormat
     const reconcileDue =
       current?.lastReconciledAt === null ||
       current?.lastReconciledAt === undefined ||
-      Date.now() - current.lastReconciledAt >= this.reconcileIntervalMs;
+      Date.now() - current.lastReconciledAt >= this.reconcileIntervalMs
     const mode =
       request.forceReconcile || !checkpointMatches || reconcileDue
         ? "reconcile"
-        : "incremental";
-    const runId = randomUUID();
+        : "incremental"
+    const runId = randomUUID()
 
     this.store.beginSync({
       collectorId,
       agent: request.agent,
       runId,
       mode,
-    });
+    })
     this.runs.set(this.key(collectorId, request.agent), {
       runId,
       checkpointFormat: request.checkpointFormat,
-    });
+    })
     return {
       runId,
       mode,
@@ -58,24 +58,24 @@ export class SessionSyncService {
         ? { checkpoint: current.checkpoint }
         : {}),
       batchSize: 100,
-    };
+    }
   }
 
   commit(
     collectorId: string,
     request: SessionSyncBatchRequest,
   ): SessionSyncBatchResult {
-    assertSessionSyncBatchRequest(request);
-    const key = this.key(collectorId, request.agent);
-    const active = this.runs.get(key);
+    assertSessionSyncBatchRequest(request)
+    const key = this.key(collectorId, request.agent)
+    const active = this.runs.get(key)
     if (!active || active.runId !== request.runId) {
-      throw new Error("Session 同步任务已失效，请重新开始同步。");
+      throw new Error("Session 同步任务已失效，请重新开始同步。")
     }
     if (
       request.checkpoint &&
       request.checkpoint.format !== active.checkpointFormat
     ) {
-      throw new Error("Session checkpoint 格式与同步任务不一致。");
+      throw new Error("Session checkpoint 格式与同步任务不一致。")
     }
 
     const result = this.store.commitBatch({
@@ -93,15 +93,15 @@ export class SessionSyncService {
       })),
       checkpoint: request.checkpoint,
       complete: request.complete,
-    });
+    })
     return {
       duplicate: result.duplicate,
       upserted: result.upserted,
       deleted: result.deleted,
-    };
+    }
   }
 
   private key(collectorId: string, agent: string): string {
-    return `${collectorId}\u0000${agent}`;
+    return `${collectorId}\u0000${agent}`
   }
 }

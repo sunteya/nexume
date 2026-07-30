@@ -3,84 +3,86 @@ import type {
   BeginSessionSyncResult,
   SessionSyncBatchRequest,
   SessionSyncBatchResult,
-} from "@nexume/contracts";
+} from "@nexume/contracts"
 
-import type { CollectorDataSource } from "./source";
+import type { CollectorDataSource } from "./source"
 
 export interface SessionSyncTarget {
-  begin(request: BeginSessionSyncRequest): Promise<BeginSessionSyncResult>;
-  commit(request: SessionSyncBatchRequest): Promise<SessionSyncBatchResult>;
+  begin(request: BeginSessionSyncRequest): Promise<BeginSessionSyncResult>
+  commit(request: SessionSyncBatchRequest): Promise<SessionSyncBatchResult>
 }
 
 export interface CollectorSyncRunnerOptions {
-  sources: CollectorDataSource[];
-  target: SessionSyncTarget;
-  intervalMs?: number;
-  onError?: (agent: string, error: unknown) => void;
+  sources: CollectorDataSource[]
+  target: SessionSyncTarget
+  intervalMs?: number
+  onError?: (agent: string, error: unknown) => void
 }
 
 export class CollectorSyncRunner {
-  private timer?: ReturnType<typeof setInterval>;
-  private readonly syncing = new Set<string>();
+  private timer?: ReturnType<typeof setInterval>
+  private readonly syncing = new Set<string>()
 
   constructor(private readonly options: CollectorSyncRunnerOptions) {}
 
   start(): void {
-    if (this.timer) return;
-    void this.syncNow();
+    if (this.timer) return
+    void this.syncNow()
     this.timer = setInterval(
       () => void this.syncNow(),
       this.options.intervalMs ?? 60_000,
-    );
+    )
   }
 
   stop(): void {
-    if (this.timer) clearInterval(this.timer);
-    this.timer = undefined;
+    if (this.timer) clearInterval(this.timer)
+    this.timer = undefined
   }
 
   async syncNow(): Promise<void> {
     await Promise.all(
       this.options.sources.map(async (source) => {
-        if (!source.available || this.syncing.has(source.agent)) return;
-        this.syncing.add(source.agent);
+        if (!source.available || this.syncing.has(source.agent)) return
+        this.syncing.add(source.agent)
         try {
-          await this.syncSource(source);
+          await this.syncSource(source)
         } catch (error) {
-          this.options.onError?.(source.agent, error);
+          this.options.onError?.(source.agent, error)
         } finally {
-          this.syncing.delete(source.agent);
+          this.syncing.delete(source.agent)
         }
       }),
-    );
+    )
   }
 
   private async syncSource(source: CollectorDataSource): Promise<void> {
     const run = await this.options.target.begin({
       agent: source.agent,
       checkpointFormat: source.checkpointFormat,
-    });
-    let checkpoint = run.checkpoint;
-    let sequence = 0;
+    })
+    let checkpoint = run.checkpoint
+    let sequence = 0
 
     while (true) {
       const page = await source.readSessionPage({
         mode: run.mode,
         checkpoint,
         limit: run.batchSize,
-      });
+      })
       if (page.items.length > run.batchSize) {
-        throw new Error(`${source.agent} 返回的同步批次超过 Server 限制。`);
+        throw new Error(`${source.agent} 返回的同步批次超过 Server 限制。`)
       }
-      const nextCheckpoint = page.checkpoint ?? checkpoint;
+      const nextCheckpoint = page.checkpoint ?? checkpoint
       if (
         page.hasMore &&
         nextCheckpoint?.format === checkpoint?.format &&
         nextCheckpoint?.value === checkpoint?.value
       ) {
-        throw new Error(`${source.agent} 同步仍有后续数据，但 checkpoint 未推进。`);
+        throw new Error(
+          `${source.agent} 同步仍有后续数据，但 checkpoint 未推进。`,
+        )
       }
-      const complete = !page.hasMore;
+      const complete = !page.hasMore
       await this.options.target.commit({
         agent: source.agent,
         runId: run.runId,
@@ -88,10 +90,10 @@ export class CollectorSyncRunner {
         items: page.items,
         checkpoint: nextCheckpoint,
         complete,
-      });
-      checkpoint = nextCheckpoint;
-      sequence += 1;
-      if (complete) return;
+      })
+      checkpoint = nextCheckpoint
+      sequence += 1
+      if (complete) return
     }
   }
 }

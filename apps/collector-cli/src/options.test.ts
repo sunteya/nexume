@@ -1,9 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test"
 
-import {
-  CollectorCliUsageError,
-  parseCollectorCliOptions,
-} from "./options";
+import { CollectorCliUsageError, parseCollectorCliOptions } from "./options"
 
 describe("parseCollectorCliOptions", () => {
   test("parses Collector connection options", () => {
@@ -23,12 +20,12 @@ describe("parseCollectorCliOptions", () => {
       token: "collector-token",
       databasePath: "/data/opencode.db",
       almaDatabasePath: "/data/alma.db",
-    });
-  });
+    })
+  })
 
   test("requires Server URL and token", () => {
-    expect(() => parseCollectorCliOptions([])).toThrow(CollectorCliUsageError);
-  });
+    expect(() => parseCollectorCliOptions([])).toThrow(CollectorCliUsageError)
+  })
 
   test("rejects unknown options", () => {
     expect(() =>
@@ -39,8 +36,8 @@ describe("parseCollectorCliOptions", () => {
         "token",
         "--unknown",
       ]),
-    ).toThrow("Unknown option");
-  });
+    ).toThrow("Unknown option")
+  })
 
   test("rejects removed identity options", () => {
     expect(() =>
@@ -52,7 +49,7 @@ describe("parseCollectorCliOptions", () => {
         "--id",
         "collector-1",
       ]),
-    ).toThrow("Unknown option: --id");
+    ).toThrow("Unknown option: --id")
     expect(() =>
       parseCollectorCliOptions([
         "--server-url",
@@ -62,6 +59,6 @@ describe("parseCollectorCliOptions", () => {
         "--name",
         "Collector 1",
       ]),
-    ).toThrow("Unknown option: --name");
-  });
-});
+    ).toThrow("Unknown option: --name")
+  })
+})

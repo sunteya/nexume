@@ -1,8 +1,8 @@
 export interface CollectorCliOptions {
-  serverUrl: string;
-  token: string;
-  databasePath?: string;
-  almaDatabasePath?: string;
+  serverUrl: string
+  token: string
+  databasePath?: string
+  almaDatabasePath?: string
 }
 
 const optionNames = new Set([
@@ -10,7 +10,7 @@ const optionNames = new Set([
   "--token",
   "--db-path",
   "--alma-db-path",
-]);
+])
 
 const usage = `Usage:
   nexume-collector --server-url <url> --token <token> [options]
@@ -18,61 +18,63 @@ const usage = `Usage:
 Options:
   --db-path <path>      Path to the OpenCode SQLite database.
   --alma-db-path <path> Path to the Alma SQLite database.
-  --help                Show this help message.`;
+  --help                Show this help message.`
 
 export class CollectorCliUsageError extends Error {
   constructor(message: string) {
-    super(message);
-    this.name = "CollectorCliUsageError";
+    super(message)
+    this.name = "CollectorCliUsageError"
   }
 }
 
 function requiredValue(args: string[], index: number, option: string): string {
-  const value = args[index + 1]?.trim();
+  const value = args[index + 1]?.trim()
   if (!value || value.startsWith("--")) {
     throw new CollectorCliUsageError(
       `${option} requires a non-empty value.\n\n${usage}`,
-    );
+    )
   }
-  return value;
+  return value
 }
 
 export function parseCollectorCliOptions(args: string[]): CollectorCliOptions {
   if (args.includes("--help")) {
-    throw new CollectorCliUsageError(usage);
+    throw new CollectorCliUsageError(usage)
   }
 
-  const values = new Map<string, string>();
+  const values = new Map<string, string>()
   for (let index = 0; index < args.length; index += 1) {
-    const option = args[index]!;
+    const option = args[index]!
     if (!optionNames.has(option)) {
-      throw new CollectorCliUsageError(`Unknown option: ${option}\n\n${usage}`);
+      throw new CollectorCliUsageError(`Unknown option: ${option}\n\n${usage}`)
     }
     if (values.has(option)) {
-      throw new CollectorCliUsageError(`Duplicate option: ${option}\n\n${usage}`);
+      throw new CollectorCliUsageError(
+        `Duplicate option: ${option}\n\n${usage}`,
+      )
     }
 
-    values.set(option, requiredValue(args, index, option));
-    index += 1;
+    values.set(option, requiredValue(args, index, option))
+    index += 1
   }
 
-  const serverUrl = values.get("--server-url");
-  const token = values.get("--token");
+  const serverUrl = values.get("--server-url")
+  const token = values.get("--token")
   if (!serverUrl || !token) {
     throw new CollectorCliUsageError(
       `--server-url and --token are required.\n\n${usage}`,
-    );
+    )
   }
 
   try {
-    const url = new URL(serverUrl);
+    const url = new URL(serverUrl)
     if (url.protocol !== "http:" && url.protocol !== "https:") {
-      throw new Error();
+      throw new Error()
     }
   } catch {
     throw new CollectorCliUsageError(
       `--server-url must be an HTTP or HTTPS URL.\n\n${usage}`,
-    );
+    )
   }
 
   return {
@@ -80,5 +82,5 @@ export function parseCollectorCliOptions(args: string[]): CollectorCliOptions {
     token,
     databasePath: values.get("--db-path"),
     almaDatabasePath: values.get("--alma-db-path"),
-  };
+  }
 }

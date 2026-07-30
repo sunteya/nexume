@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto"
 
 import {
   assertCollectorName,
@@ -6,12 +6,9 @@ import {
   type CreateCollectorInput,
   type CreateCollectorResult,
   type ManagedCollectorInfo,
-} from "@nexume/contracts";
-import type {
-  CollectorRegistration,
-  ServerCore,
-} from "@nexume/server-core";
-import type { CollectorRecord, CollectorStore } from "@nexume/storage";
+} from "@nexume/contracts"
+import type { CollectorRegistration, ServerCore } from "@nexume/server-core"
+import type { CollectorRecord, CollectorStore } from "@nexume/storage"
 
 export class CollectorManagementError extends Error {
   constructor(
@@ -19,30 +16,32 @@ export class CollectorManagementError extends Error {
     message: string,
     readonly status: number,
   ) {
-    super(message);
-    this.name = "CollectorManagementError";
+    super(message)
+    this.name = "CollectorManagementError"
   }
 }
 
 export interface CollectorManagementOptions {
-  collectors: CollectorStore;
-  core: ServerCore;
-  localMetadata: CollectorRuntimeMetadata;
-  onLocalCollectorChanged?: (enabled: boolean) => void;
+  collectors: CollectorStore
+  core: ServerCore
+  localMetadata: CollectorRuntimeMetadata
+  onLocalCollectorChanged?: (enabled: boolean) => void
 }
 
 function collectorIdFromToken(token: string): string | undefined {
-  if (!token.startsWith("nxc_")) return undefined;
-  const separator = token.indexOf(".", 4);
-  return separator > 4 ? token.slice(4, separator) : undefined;
+  if (!token.startsWith("nxc_")) return undefined
+  const separator = token.indexOf(".", 4)
+  return separator > 4 ? token.slice(4, separator) : undefined
 }
 
 function tokensEqual(actual: string, expected: string): boolean {
-  const encoder = new TextEncoder();
-  const actualBytes = encoder.encode(actual);
-  const expectedBytes = encoder.encode(expected);
-  return actualBytes.length === expectedBytes.length &&
-    timingSafeEqual(actualBytes, expectedBytes);
+  const encoder = new TextEncoder()
+  const actualBytes = encoder.encode(actual)
+  const expectedBytes = encoder.encode(expected)
+  return (
+    actualBytes.length === expectedBytes.length &&
+    timingSafeEqual(actualBytes, expectedBytes)
+  )
 }
 
 function managedInfo(
@@ -61,31 +60,35 @@ function managedInfo(
     lastSeenAt: online?.lastSeenAt ?? record.lastSeenAt ?? undefined,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
-  };
+  }
 }
 
 export class CollectorManagementService {
-  private localRegistration?: CollectorRegistration;
-  private disconnectRemote: (id: string) => void = () => {};
-  private triggerSync: (id: string) => boolean = () => false;
+  private localRegistration?: CollectorRegistration
+  private disconnectRemote: (id: string) => void = () => {}
+  private triggerSync: (id: string) => boolean = () => false
 
   constructor(private readonly options: CollectorManagementOptions) {}
 
   setRemoteDisconnect(disconnect: (id: string) => void): void {
-    this.disconnectRemote = disconnect;
+    this.disconnectRemote = disconnect
   }
 
   setSyncTrigger(trigger: (id: string) => boolean): void {
-    this.triggerSync = trigger;
+    this.triggerSync = trigger
   }
 
   syncLocalCollector(): void {
-    const record = this.options.collectors.get("local");
-    if (!record || record.connectionType !== "local" || this.localRegistration) {
-      return;
+    const record = this.options.collectors.get("local")
+    if (
+      !record ||
+      record.connectionType !== "local" ||
+      this.localRegistration
+    ) {
+      return
     }
 
-    const now = Date.now();
+    const now = Date.now()
     this.localRegistration = this.options.core.registerCollector({
       descriptor: {
         id: record.id,
@@ -93,173 +96,187 @@ export class CollectorManagementService {
         ...this.options.localMetadata,
       },
       connectionType: "local",
-    });
+    })
     this.options.collectors.updateRuntime(record.id, {
       ...this.options.localMetadata,
       connectedAt: now,
       lastSeenAt: now,
-    });
-    this.options.onLocalCollectorChanged?.(true);
+    })
+    this.options.onLocalCollectorChanged?.(true)
   }
 
   list(): ManagedCollectorInfo[] {
     const online = new Map(
-      this.options.core.listCollectors().map((collector) => [collector.id, collector]),
-    );
+      this.options.core
+        .listCollectors()
+        .map((collector) => [collector.id, collector]),
+    )
     return this.options.collectors
       .list()
-      .map((record) => managedInfo(record, online.get(record.id)));
+      .map((record) => managedInfo(record, online.get(record.id)))
   }
 
   create(input: CreateCollectorInput): CreateCollectorResult {
-    assertCollectorName(input.name);
-    const name = input.name.trim();
+    assertCollectorName(input.name)
+    const name = input.name.trim()
 
     if (input.connectionType === "local") {
-      if (this.options.collectors.list().some((item) => item.connectionType === "local")) {
+      if (
+        this.options.collectors
+          .list()
+          .some((item) => item.connectionType === "local")
+      ) {
         throw new CollectorManagementError(
           "local_collector_exists",
           "A local collector already exists.",
           409,
-        );
+        )
       }
 
-      let record: CollectorRecord;
+      let record: CollectorRecord
       try {
         record = this.options.collectors.create({
           id: "local",
           name,
           connectionType: "local",
-        });
+        })
       } catch (error) {
-        if (this.options.collectors.list().some((item) => item.connectionType === "local")) {
+        if (
+          this.options.collectors
+            .list()
+            .some((item) => item.connectionType === "local")
+        ) {
           throw new CollectorManagementError(
             "local_collector_exists",
             "A local collector already exists.",
             409,
-          );
+          )
         }
-        throw error;
+        throw error
       }
       try {
-        this.syncLocalCollector();
+        this.syncLocalCollector()
       } catch (error) {
-        this.options.collectors.delete(record.id);
-        throw error;
+        this.options.collectors.delete(record.id)
+        throw error
       }
-      return { collector: this.getManaged(record.id) };
+      return { collector: this.getManaged(record.id) }
     }
 
-    const id = randomUUID();
-    const token = `nxc_${id}.${randomBytes(32).toString("base64url")}`;
+    const id = randomUUID()
+    const token = `nxc_${id}.${randomBytes(32).toString("base64url")}`
     const record = this.options.collectors.create({
       id,
       name,
       connectionType: "remote",
       token,
-    });
-    return { collector: managedInfo(record, undefined), token };
+    })
+    return { collector: managedInfo(record, undefined), token }
   }
 
   rename(id: string, name: string): ManagedCollectorInfo {
-    assertCollectorName(name);
-    const record = this.options.collectors.updateName(id, name.trim());
-    if (!record) throw this.notFound();
-    this.options.core.renameCollector(id, record.name);
-    return this.getManaged(id);
+    assertCollectorName(name)
+    const record = this.options.collectors.updateName(id, name.trim())
+    if (!record) throw this.notFound()
+    this.options.core.renameCollector(id, record.name)
+    return this.getManaged(id)
   }
 
   delete(id: string): void {
-    const record = this.options.collectors.get(id);
-    if (!record) throw this.notFound();
+    const record = this.options.collectors.get(id)
+    if (!record) throw this.notFound()
 
-    this.options.collectors.delete(id);
+    this.options.collectors.delete(id)
     if (record.connectionType === "local") {
-      this.localRegistration?.unregister();
-      this.localRegistration = undefined;
-      this.options.onLocalCollectorChanged?.(false);
+      this.localRegistration?.unregister()
+      this.localRegistration = undefined
+      this.options.onLocalCollectorChanged?.(false)
     } else {
-      this.disconnectRemote(id);
+      this.disconnectRemote(id)
     }
   }
 
   revealToken(id: string): string {
-    const record = this.options.collectors.get(id);
-    if (!record) throw this.notFound();
+    const record = this.options.collectors.get(id)
+    if (!record) throw this.notFound()
     if (record.connectionType !== "remote") {
       throw new CollectorManagementError(
         "collector_has_no_token",
         "Local collectors do not use connection tokens.",
         409,
-      );
+      )
     }
 
-    const token = record.token;
+    const token = record.token
     if (!token) {
       throw new CollectorManagementError(
         "collector_token_unavailable",
         "The collector token is unavailable.",
         500,
-      );
+      )
     }
-    return token;
+    return token
   }
 
   sync(id: string): void {
-    if (!this.options.collectors.get(id)) throw this.notFound();
+    if (!this.options.collectors.get(id)) throw this.notFound()
     if (!this.triggerSync(id)) {
       throw new CollectorManagementError(
         "collector_offline",
         "The collector is offline and cannot sync now.",
         409,
-      );
+      )
     }
   }
 
-  authenticate(token: string): Pick<CollectorRecord, "id" | "name"> | undefined {
-    const id = collectorIdFromToken(token);
-    if (!id) return undefined;
-    const record = this.options.collectors.get(id);
-    return record?.connectionType === "remote" && record.token && tokensEqual(token, record.token)
+  authenticate(
+    token: string,
+  ): Pick<CollectorRecord, "id" | "name"> | undefined {
+    const id = collectorIdFromToken(token)
+    if (!id) return undefined
+    const record = this.options.collectors.get(id)
+    return record?.connectionType === "remote" &&
+      record.token &&
+      tokensEqual(token, record.token)
       ? { id: record.id, name: record.name }
-      : undefined;
+      : undefined
   }
 
   getRemote(id: string): Pick<CollectorRecord, "id" | "name"> | undefined {
-    const record = this.options.collectors.get(id);
+    const record = this.options.collectors.get(id)
     return record?.connectionType === "remote"
       ? { id: record.id, name: record.name }
-      : undefined;
+      : undefined
   }
 
   connected(id: string, metadata: CollectorRuntimeMetadata): void {
-    const now = Date.now();
+    const now = Date.now()
     this.options.collectors.updateRuntime(id, {
       ...metadata,
       connectedAt: now,
       lastSeenAt: now,
-    });
+    })
   }
 
   touched(id: string): void {
-    const record = this.options.collectors.get(id);
-    if (!record) return;
+    const record = this.options.collectors.get(id)
+    if (!record) return
     this.options.collectors.updateRuntime(id, {
       hostname: record.hostname,
       version: record.version,
       agents: record.agents,
       connectedAt: record.connectedAt,
       lastSeenAt: Date.now(),
-    });
+    })
   }
 
   private getManaged(id: string): ManagedCollectorInfo {
-    const record = this.options.collectors.get(id);
-    if (!record) throw this.notFound();
+    const record = this.options.collectors.get(id)
+    if (!record) throw this.notFound()
     const online = this.options.core
       .listCollectors()
-      .find((collector) => collector.id === id);
-    return managedInfo(record, online);
+      .find((collector) => collector.id === id)
+    return managedInfo(record, online)
   }
 
   private notFound(): CollectorManagementError {
@@ -267,6 +284,6 @@ export class CollectorManagementService {
       "collector_not_found",
       "The collector does not exist.",
       404,
-    );
+    )
   }
 }

@@ -1,13 +1,13 @@
-import type { Database } from "bun:sqlite";
+import type { Database } from "bun:sqlite"
 
 export interface SettingValueMap {
-  "app.initialized_at": number;
+  "app.initialized_at": number
 }
 
-export type SettingKey = keyof SettingValueMap;
+export type SettingKey = keyof SettingValueMap
 
 interface SettingRow {
-  value: string;
+  value: string
 }
 
 export class SettingsStore {
@@ -18,8 +18,8 @@ export class SettingsStore {
       .query<SettingRow, [SettingKey]>(
         "SELECT value FROM settings WHERE key = ?",
       )
-      .get(key);
-    return row ? (JSON.parse(row.value) as SettingValueMap[K]) : undefined;
+      .get(key)
+    return row ? (JSON.parse(row.value) as SettingValueMap[K]) : undefined
   }
 
   set<K extends SettingKey>(key: K, value: SettingValueMap[K]): void {
@@ -31,6 +31,6 @@ export class SettingsStore {
            value = excluded.value,
            updated_at = excluded.updated_at`,
       )
-      .run(key, JSON.stringify(value), Date.now());
+      .run(key, JSON.stringify(value), Date.now())
   }
 }

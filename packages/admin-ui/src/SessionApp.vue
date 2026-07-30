@@ -4,6 +4,7 @@ import {
   ElButton,
   ElEmpty,
   ElInput,
+  ElMessage,
   ElOption,
   ElSelect,
   ElTable,
@@ -12,7 +13,7 @@ import {
   ElTooltip,
   type TableInstance,
 } from "element-plus"
-import { RefreshCw, Search } from "lucide-vue-next"
+import { Check, Pencil, RefreshCw, Search, X } from "lucide-vue-next"
 import {
   computed,
   nextTick,
@@ -75,6 +76,9 @@ const loading = ref(false)
 const collectorsLoading = ref(false)
 const errorMessage = ref("")
 const collectorsErrorMessage = ref("")
+const editingSessionKey = ref("")
+const editingTitle = ref("")
+const savingSessionKey = ref("")
 const table = ref<TableInstance>()
 const tableRegion = ref<HTMLElement>()
 let latestRequest = 0
@@ -106,6 +110,69 @@ const agentOptions = computed(() => {
 
 function getRowKey(session: SessionSummary): string {
   return `${session.collectorId}:${session.agent}:${session.id}`
+}
+
+function asSession(row: unknown): SessionSummary {
+  return row as SessionSummary
+}
+
+async function startTitleEdit(session: SessionSummary): Promise<void> {
+  editingSessionKey.value = getRowKey(session)
+  editingTitle.value = session.title
+  await nextTick()
+  const input = tableRegion.value?.querySelector<HTMLInputElement>(
+    ".session-title-editor input",
+  )
+  input?.focus()
+  input?.select()
+}
+
+function cancelTitleEdit(): void {
+  if (savingSessionKey.value) return
+  editingSessionKey.value = ""
+  editingTitle.value = ""
+}
+
+async function saveTitle(session: SessionSummary): Promise<void> {
+  const title = editingTitle.value.trim()
+  if (!title) {
+    ElMessage.error("Enter a session title.")
+    return
+  }
+  if (title === session.title) {
+    cancelTitleEdit()
+    return
+  }
+
+  const key = getRowKey(session)
+  savingSessionKey.value = key
+  try {
+    const updated = await props.client.updateSessionTitle(session.collectorId, {
+      agent: session.agent,
+      id: session.id,
+      title,
+      expectedTitle: session.title,
+      expectedUpdatedAt: session.updatedAt,
+    })
+    const index = sessions.value.findIndex(
+      (item) => getRowKey(item) === getRowKey(updated),
+    )
+    if (index >= 0) sessions.value[index] = updated
+    editingSessionKey.value = ""
+    editingTitle.value = ""
+    ElMessage.success("Session title updated.")
+  } catch (error) {
+    ElMessage.error(
+      error instanceof Error
+        ? error.message
+        : "Unable to update the session title.",
+    )
+    editingSessionKey.value = ""
+    editingTitle.value = ""
+    await loadSessions(false)
+  } finally {
+    savingSessionKey.value = ""
+  }
 }
 
 function formatExactTime(timestamp: number): string {
@@ -420,11 +487,61 @@ onActivated(() => {
         scrollbar-always-on
         @scroll="handleTableScroll"
       >
-        <el-table-column label="Title" min-width="250" show-overflow-tooltip>
+        <el-table-column label="Title" min-width="290">
           <template #default="{ row }">
-            <span class="session-title">{{
-              row.title || "Untitled session"
-            }}</span>
+            <div
+              v-if="editingSessionKey === getRowKey(asSession(row))"
+              class="session-title-editor"
+            >
+              <el-input
+                v-model="editingTitle"
+                size="small"
+                maxlength="4096"
+                aria-label="Session title"
+                @keyup.enter="saveTitle(asSession(row))"
+                @keyup.esc="cancelTitleEdit"
+              />
+              <el-tooltip content="Save title" placement="top">
+                <el-button
+                  class="session-title-action"
+                  text
+                  circle
+                  :loading="savingSessionKey === getRowKey(asSession(row))"
+                  aria-label="Save session title"
+                  @click.stop="saveTitle(asSession(row))"
+                >
+                  <check :size="15" />
+                </el-button>
+              </el-tooltip>
+              <el-tooltip content="Cancel" placement="top">
+                <el-button
+                  class="session-title-action"
+                  text
+                  circle
+                  :disabled="savingSessionKey === getRowKey(asSession(row))"
+                  aria-label="Cancel session title edit"
+                  @click.stop="cancelTitleEdit"
+                >
+                  <x :size="15" />
+                </el-button>
+              </el-tooltip>
+            </div>
+            <div v-else class="session-title-display">
+              <span class="session-title" :title="row.title">{{
+                row.title || "Untitled session"
+              }}</span>
+              <el-tooltip content="Edit title" placement="top">
+                <el-button
+                  class="session-title-action session-title-edit"
+                  text
+                  circle
+                  aria-label="Edit session title"
+                  @click.stop="startTitleEdit(asSession(row))"
+                >
+                  <pencil :size="14" />
+                </el-button>
+              </el-tooltip>
+            </div>
           </template>
         </el-table-column>
 

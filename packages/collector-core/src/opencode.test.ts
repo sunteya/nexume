@@ -9,6 +9,7 @@ import {
   OpenCodeCollector,
   UnsupportedCollectorDataError,
 } from "./opencode"
+import { SessionTitleConflictError } from "./source"
 
 const temporaryRoots: string[] = []
 
@@ -88,13 +89,11 @@ describe("OpenCodeCollector", () => {
 
   test("continues strictly after an opaque checkpoint", () => {
     const collector = new OpenCodeCollector({ databasePath: createDatabase() })
+    const first = collector.readSessionPage({ mode: "reconcile", limit: 20 })
     const result = collector.readSessionPage({
       mode: "incremental",
       limit: 20,
-      checkpoint: {
-        format: collector.checkpointFormat,
-        value: JSON.stringify({ updatedAt: 2_000, id: "session-20" }),
-      },
+      checkpoint: first.checkpoint,
     })
 
     expect(result.hasMore).toBe(false)
@@ -104,6 +103,45 @@ describe("OpenCodeCollector", () => {
       id: "archived",
       archivedAt: 4_100,
     })
+  })
+
+  test("writes titles conditionally and detects title-only source changes", () => {
+    const databasePath = createDatabase()
+    const collector = new OpenCodeCollector({ databasePath })
+    const initial = collector.readSessionPage({ mode: "reconcile", limit: 100 })
+    const database = new Database(databasePath, { strict: true })
+    database
+      .query("UPDATE session SET title = ? WHERE id = ?")
+      .run("Changed in OpenCode", "session-01")
+    database.close()
+
+    const changed = collector.readSessionPage({
+      mode: "incremental",
+      checkpoint: initial.checkpoint,
+      limit: 100,
+    })
+    expect(
+      changed.items.find((item) => item.id === "session-01"),
+    ).toMatchObject({ title: "Changed in OpenCode", updatedAt: 100 })
+
+    const updated = collector.updateSessionTitle({
+      id: "session-01",
+      title: "Changed in Nexume",
+      expectedTitle: "Changed in OpenCode",
+      expectedUpdatedAt: 100,
+    })
+    expect(updated).toMatchObject({
+      title: "Changed in Nexume",
+      updatedAt: 100,
+    })
+    expect(() =>
+      collector.updateSessionTitle({
+        id: "session-01",
+        title: "Stale overwrite",
+        expectedTitle: "Changed in OpenCode",
+        expectedUpdatedAt: 100,
+      }),
+    ).toThrow(SessionTitleConflictError)
   })
 
   test("reports a missing database", () => {

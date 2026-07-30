@@ -9,6 +9,7 @@ import {
   CollectorUnavailableError,
   UnsupportedCollectorDataError,
 } from "./opencode"
+import { SessionTitleConflictError } from "./source"
 
 const temporaryRoots: string[] = []
 
@@ -127,16 +128,11 @@ describe("AlmaCollector", () => {
 
   test("continues after a tied timestamp using the session id", () => {
     const collector = new AlmaCollector({ databasePath: createDatabase() })
+    const first = collector.readSessionPage({ mode: "reconcile", limit: 20 })
     const result = collector.readSessionPage({
       mode: "incremental",
       limit: 20,
-      checkpoint: {
-        format: collector.checkpointFormat,
-        value: JSON.stringify({
-          updatedAt: timestamp(20_000),
-          id: "thread-20",
-        }),
-      },
+      checkpoint: first.checkpoint,
     })
 
     expect(result.hasMore).toBe(false)
@@ -148,6 +144,48 @@ describe("AlmaCollector", () => {
       "thread-24",
       "thread-25",
     ])
+  })
+
+  test("writes titles conditionally and detects title-only source changes", () => {
+    const databasePath = createDatabase()
+    const collector = new AlmaCollector({ databasePath })
+    const initial = collector.readSessionPage({ mode: "reconcile", limit: 100 })
+    const database = new Database(databasePath, { strict: true })
+    database
+      .query("UPDATE chat_threads SET title = ? WHERE id = ?")
+      .run("Changed in Alma", "thread-01")
+    database.close()
+
+    const changed = collector.readSessionPage({
+      mode: "incremental",
+      checkpoint: initial.checkpoint,
+      limit: 100,
+    })
+    expect(changed.items.find((item) => item.id === "thread-01")).toMatchObject(
+      {
+        title: "Changed in Alma",
+        updatedAt: 1_000,
+      },
+    )
+
+    const updated = collector.updateSessionTitle({
+      id: "thread-01",
+      title: "Changed in Nexume",
+      expectedTitle: "Changed in Alma",
+      expectedUpdatedAt: 1_000,
+    })
+    expect(updated).toMatchObject({
+      title: "Changed in Nexume",
+      updatedAt: 1_000,
+    })
+    expect(() =>
+      collector.updateSessionTitle({
+        id: "thread-01",
+        title: "Stale overwrite",
+        expectedTitle: "Changed in Alma",
+        expectedUpdatedAt: 1_000,
+      }),
+    ).toThrow(SessionTitleConflictError)
   })
 
   test("reports a missing database", () => {

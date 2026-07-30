@@ -229,10 +229,11 @@ export class SessionSyncStore {
            source_archived_at = excluded.source_archived_at,
            deleted_at = NULL,
            last_synced_at = excluded.last_synced_at,
-           last_reconcile_id = CASE
-             WHEN excluded.last_reconcile_id IS NOT NULL THEN excluded.last_reconcile_id
-             ELSE sessions.last_reconcile_id
-           END`,
+            last_reconcile_id = CASE
+              WHEN excluded.last_reconcile_id IS NOT NULL THEN excluded.last_reconcile_id
+              ELSE sessions.last_reconcile_id
+            END
+          WHERE excluded.source_updated_at >= sessions.source_updated_at`,
       )
       for (const item of input.items) {
         upsert.run(

@@ -6,6 +6,7 @@ import {
   assertCreateCollectorInput,
   assertListSessionsParams,
   assertProjectInput,
+  assertUpdateSessionTitleRequest,
   type AvailableSessionDirectory,
   type CreateCollectorInput,
   type CreateCollectorResult,
@@ -17,12 +18,15 @@ import {
   type RuntimeInfo,
   type SessionBatchSize,
   type SessionStatus,
+  type SessionSummary,
+  type UpdateSessionTitleRequest,
 } from "@nexume/contracts"
 import { InvalidSessionCursorError, type ServerCore } from "@nexume/server-core"
 import { AlreadyInitializedError } from "@nexume/storage"
 
 import { CollectorManagementError } from "./collector-management"
 import { ProjectManagementError } from "./project-management"
+import { SessionManagementError } from "./session-management"
 
 interface ErrorBody {
   error: {
@@ -52,6 +56,12 @@ export interface RequestHandlerOptions {
     update(id: string, input: CreateProjectInput): ProjectInfo
     delete(id: string): void
     listDirectories(): AvailableSessionDirectory[]
+  }
+  sessions?: {
+    updateTitle(
+      collectorId: string,
+      request: UpdateSessionTitleRequest,
+    ): Promise<SessionSummary>
   }
   getRuntimeInfo?: () => RuntimeInfo
   webRoot?: string
@@ -304,6 +314,47 @@ export function createRequestHandler(options: RequestHandlerOptions) {
           return errorResponse(
             "internal_error",
             "The Server encountered an internal error.",
+            500,
+          )
+        }
+      }
+
+      const sessionMatch = url.pathname.match(
+        /^\/api\/sessions\/([^/]+)\/([^/]+)\/([^/]+)$/,
+      )
+      if (request.method === "PATCH" && sessionMatch && options.sessions) {
+        let collectorId: string
+        let update: UpdateSessionTitleRequest
+        try {
+          const body = await parseJsonBody(request)
+          collectorId = decodeURIComponent(sessionMatch[1]!)
+          const candidate = {
+            agent: decodeURIComponent(sessionMatch[2]!),
+            id: decodeURIComponent(sessionMatch[3]!),
+            title: body.title,
+            expectedTitle: body.expectedTitle,
+            expectedUpdatedAt: body.expectedUpdatedAt,
+          }
+          assertUpdateSessionTitleRequest(candidate)
+          update = candidate
+        } catch {
+          return errorResponse(
+            "invalid_request",
+            "The session title update is invalid.",
+            400,
+          )
+        }
+
+        try {
+          return json(await options.sessions.updateTitle(collectorId, update))
+        } catch (error) {
+          if (error instanceof SessionManagementError) {
+            return errorResponse(error.code, error.message, error.status)
+          }
+          options.onError?.(error)
+          return errorResponse(
+            "internal_error",
+            "Unable to update the session title.",
             500,
           )
         }

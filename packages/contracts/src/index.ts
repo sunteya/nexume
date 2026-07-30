@@ -17,6 +17,18 @@ export interface CollectedSessionSummary {
   archivedAt?: number
 }
 
+export interface UpdateSessionTitleRequest {
+  agent: AgentId
+  id: string
+  title: string
+  expectedTitle: string
+  expectedUpdatedAt: number
+}
+
+export interface UpdateSessionTitleResult {
+  session: CollectedSessionSummary
+}
+
 export interface SessionSummary extends CollectedSessionSummary {
   collectorId: string
   collectorName: string
@@ -187,6 +199,10 @@ export interface CollectorProtocolError {
   message: string
 }
 
+export type UpdateSessionTitleResponse =
+  | { ok: true; data: UpdateSessionTitleResult }
+  | { ok: false; error: CollectorProtocolError }
+
 export type BeginSessionSyncResponse =
   | { ok: true; data: BeginSessionSyncResult }
   | { ok: false; error: CollectorProtocolError }
@@ -197,6 +213,10 @@ export type SessionSyncBatchResponse =
 
 export interface ServerToCollectorEvents {
   "sessions:sync:request": () => void
+  "sessions:title:update": (
+    request: UpdateSessionTitleRequest,
+    acknowledge: (response: UpdateSessionTitleResponse) => void,
+  ) => void
 }
 
 export interface CollectorToServerEvents {
@@ -293,6 +313,29 @@ export function assertCollectedSessionSummary(
   if (session.archivedAt !== undefined) {
     assertSafeTimestamp(session.archivedAt, "Session 归档时间")
   }
+}
+
+export function assertUpdateSessionTitleRequest(
+  value: unknown,
+): asserts value is UpdateSessionTitleRequest {
+  if (!value || typeof value !== "object") {
+    throw new Error("Session 标题修改参数无效。")
+  }
+  const request = value as Partial<UpdateSessionTitleRequest>
+  assertAgentId(request.agent)
+  if (
+    typeof request.id !== "string" ||
+    !request.id ||
+    request.id.length > 512 ||
+    typeof request.title !== "string" ||
+    !request.title.trim() ||
+    request.title.length > 4096 ||
+    typeof request.expectedTitle !== "string" ||
+    request.expectedTitle.length > 4096
+  ) {
+    throw new Error("Session 标题修改参数无效。")
+  }
+  assertSafeTimestamp(request.expectedUpdatedAt, "Session 预期更新时间")
 }
 
 export function assertSessionSyncCheckpoint(

@@ -4,9 +4,14 @@ export {
   type CollectorConnectionState,
 } from "./connection"
 export {
+  SessionTitleConflictError,
+  SessionTitleNotFoundError,
+  createSessionTitleFingerprint,
   type CollectorDataSource,
+  type SessionTitleUpdateInput,
   type SessionSourcePage,
   type SessionSourcePageRequest,
+  type WritableCollectorDataSource,
 } from "./source"
 export {
   CollectorSyncRunner,

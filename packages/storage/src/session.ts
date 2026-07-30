@@ -50,6 +50,14 @@ export interface SessionListResult {
   nextCursor?: SessionListCursor
 }
 
+export interface ApplySourceSessionInput {
+  title: string
+  directory: string
+  sourceCreatedAt: number
+  sourceUpdatedAt: number
+  sourceArchivedAt?: number | null
+}
+
 interface SessionRow {
   collector_id: string
   agent: string
@@ -110,6 +118,39 @@ export class SessionStore {
       )
       .get(key.collectorId, key.agent, key.sourceId)
     return row ? fromRow(row) : undefined
+  }
+
+  applySourceUpdate(
+    key: SessionKey,
+    input: ApplySourceSessionInput,
+  ): SessionRecord | undefined {
+    const now = Date.now()
+    this.db
+      .query(
+        `UPDATE sessions SET
+           title = ?,
+           directory = ?,
+           source_created_at = ?,
+           source_updated_at = ?,
+           source_archived_at = ?,
+           deleted_at = NULL,
+           last_synced_at = ?
+         WHERE collector_id = ? AND agent = ? AND source_id = ?
+           AND source_updated_at <= ?`,
+      )
+      .run(
+        input.title,
+        input.directory,
+        input.sourceCreatedAt,
+        input.sourceUpdatedAt,
+        input.sourceArchivedAt ?? null,
+        now,
+        key.collectorId,
+        key.agent,
+        key.sourceId,
+        input.sourceUpdatedAt,
+      )
+    return this.get(key)
   }
 
   listAvailableDirectories(): AvailableSessionDirectoryRecord[] {

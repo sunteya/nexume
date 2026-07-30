@@ -12,6 +12,8 @@ import type {
   RenameCollectorInput,
   RuntimeInfo,
   SessionBatch,
+  SessionSummary,
+  UpdateSessionTitleRequest,
 } from "@nexume/contracts"
 
 export interface InitializationClient {
@@ -24,6 +26,10 @@ export interface InitializationClient {
 
 export interface SessionClient {
   listSessions(params: ListSessionsParams): Promise<SessionBatch>
+  updateSessionTitle(
+    collectorId: string,
+    input: UpdateSessionTitleRequest,
+  ): Promise<SessionSummary>
 }
 
 export interface CollectorClient {

@@ -7,9 +7,20 @@ import type {
   CollectorToServerEvents,
   ServerToCollectorEvents,
   SessionSyncBatchResponse,
+  UpdateSessionTitleResponse,
 } from "@nexume/contracts"
+import { assertUpdateSessionTitleRequest } from "@nexume/contracts"
 
-import type { CollectorDataSource } from "./source"
+import {
+  SessionTitleConflictError,
+  SessionTitleNotFoundError,
+  type CollectorDataSource,
+  type WritableCollectorDataSource,
+} from "./source"
+import {
+  CollectorUnavailableError,
+  UnsupportedCollectorDataError,
+} from "./opencode"
 import { CollectorSyncRunner } from "./sync-runner"
 
 export type CollectorConnectionState =
@@ -35,6 +46,26 @@ function responseData<T>(
   return response.data
 }
 
+function titleUpdateError(error: unknown): UpdateSessionTitleResponse {
+  let code = "session_title_update_failed"
+  if (error instanceof SessionTitleConflictError) {
+    code = "session_title_conflict"
+  } else if (error instanceof SessionTitleNotFoundError) {
+    code = "session_not_found"
+  } else if (error instanceof CollectorUnavailableError) {
+    code = "collector_unavailable"
+  } else if (error instanceof UnsupportedCollectorDataError) {
+    code = "unsupported_collector_data"
+  }
+  return {
+    ok: false,
+    error: {
+      code,
+      message: error instanceof Error ? error.message : String(error),
+    },
+  }
+}
+
 export class CollectorConnection {
   readonly socket: CollectorSocket
   private heartbeat?: ReturnType<typeof setInterval>
@@ -42,6 +73,7 @@ export class CollectorConnection {
 
   constructor(private readonly options: CollectorConnectionOptions) {
     const sourceAgents = new Set<string>()
+    const sources = new Map<string, CollectorDataSource>()
     for (const source of options.sources) {
       if (!options.metadata.agents.includes(source.agent)) {
         throw new Error(`Collector metadata 未声明 ${source.agent} Agent。`)
@@ -50,6 +82,7 @@ export class CollectorConnection {
         throw new Error(`Collector 包含重复的 ${source.agent} Agent 数据源。`)
       }
       sourceAgents.add(source.agent)
+      sources.set(source.agent, source)
     }
     const serverUrl = options.serverUrl.replace(/\/$/, "")
     const auth: CollectorSocketAuth = {
@@ -105,6 +138,23 @@ export class CollectorConnection {
     })
     this.socket.on("sessions:sync:request", () => {
       void this.runner.syncNow()
+    })
+    this.socket.on("sessions:title:update", async (request, acknowledge) => {
+      try {
+        assertUpdateSessionTitleRequest(request)
+        const source = sources.get(request.agent)
+        if (!source || !("updateSessionTitle" in source)) {
+          throw new UnsupportedCollectorDataError(
+            "该 Collector 不支持修改此 Agent 的 Session 标题。",
+          )
+        }
+        const session = await (
+          source as WritableCollectorDataSource
+        ).updateSessionTitle(request)
+        acknowledge({ ok: true, data: { session } })
+      } catch (error) {
+        acknowledge(titleUpdateError(error))
+      }
     })
   }
 

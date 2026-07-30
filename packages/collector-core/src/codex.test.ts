@@ -9,6 +9,7 @@ import {
   CollectorUnavailableError,
   UnsupportedCollectorDataError,
 } from "./opencode"
+import { SessionTitleConflictError } from "./source"
 
 const temporaryRoots: string[] = []
 
@@ -91,15 +92,7 @@ function createDatabase(schema = true): string {
       "Internal preview",
       '{"subagent":{"other":"guardian"}}',
     )
-    insert.run(
-      "empty-thread",
-      "Empty thread",
-      32,
-      32,
-      32_000,
-      "",
-      "cli",
-    )
+    insert.run("empty-thread", "Empty thread", 32, 32, 32_000, "", "cli")
     database.exec(`
       UPDATE threads
       SET archived = 1, archived_at = 40
@@ -136,13 +129,11 @@ describe("CodexCollector", () => {
 
   test("continues after a tied millisecond timestamp", () => {
     const collector = new CodexCollector({ databasePath: createDatabase() })
+    const first = collector.readSessionPage({ mode: "reconcile", limit: 20 })
     const result = collector.readSessionPage({
       mode: "incremental",
       limit: 20,
-      checkpoint: {
-        format: collector.checkpointFormat,
-        value: JSON.stringify({ updatedAt: 20_000, id: "thread-20" }),
-      },
+      checkpoint: first.checkpoint,
     })
 
     expect(result.hasMore).toBe(false)
@@ -184,6 +175,48 @@ describe("CodexCollector", () => {
     expect(title?.includes("�")).toBe(false)
   })
 
+  test("writes titles conditionally and detects title-only source changes", () => {
+    const databasePath = createDatabase()
+    const collector = new CodexCollector({ databasePath })
+    const initial = collector.readSessionPage({ mode: "reconcile", limit: 100 })
+    const database = new Database(databasePath, { strict: true })
+    database
+      .query("UPDATE threads SET title = ? WHERE id = ?")
+      .run("Changed in Codex", "thread-01")
+    database.close()
+
+    const changed = collector.readSessionPage({
+      mode: "incremental",
+      checkpoint: initial.checkpoint,
+      limit: 100,
+    })
+    expect(changed.items.find((item) => item.id === "thread-01")).toMatchObject(
+      {
+        title: "Changed in Codex",
+        updatedAt: 1_000,
+      },
+    )
+
+    const updated = collector.updateSessionTitle({
+      id: "thread-01",
+      title: "Changed in Nexume",
+      expectedTitle: "Changed in Codex",
+      expectedUpdatedAt: 1_000,
+    })
+    expect(updated).toMatchObject({
+      title: "Changed in Nexume",
+      updatedAt: 1_000,
+    })
+    expect(() =>
+      collector.updateSessionTitle({
+        id: "thread-01",
+        title: "Stale overwrite",
+        expectedTitle: "Changed in Codex",
+        expectedUpdatedAt: 1_000,
+      }),
+    ).toThrow(SessionTitleConflictError)
+  })
+
   test("uses CODEX_HOME for the default database path", () => {
     const databasePath = createDatabase()
     const codexHome = dirname(databasePath)
@@ -221,7 +254,9 @@ describe("CodexCollector", () => {
   })
 
   test("reports an unsupported database schema", () => {
-    const collector = new CodexCollector({ databasePath: createDatabase(false) })
+    const collector = new CodexCollector({
+      databasePath: createDatabase(false),
+    })
 
     expect(() =>
       collector.readSessionPage({ mode: "incremental", limit: 20 }),

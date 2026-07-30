@@ -580,6 +580,49 @@ button:focus-visible,
   font-weight: 590;
 }
 
+.session-title-display,
+.session-title-editor {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.session-title {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-title-editor .el-input {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.session-title-action.el-button {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  margin: 0;
+  color: var(--nx-text-muted);
+}
+
+.session-title-action.el-button:hover {
+  color: var(--nx-accent);
+}
+
+.session-title-edit {
+  opacity: 0;
+}
+
+.session-title-display:hover .session-title-edit,
+.session-title-display:focus-within .session-title-edit {
+  opacity: 1;
+}
+
 .updated-time {
   color: var(--nx-text-soft);
   font-variant-numeric: tabular-nums;

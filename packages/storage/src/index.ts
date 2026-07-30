@@ -32,6 +32,7 @@ export {
 export {
   SessionStore,
   type AgentId,
+  type ApplySourceSessionInput,
   type AvailableSessionDirectoryRecord,
   type ListSessionsOptions,
   type SessionKey,

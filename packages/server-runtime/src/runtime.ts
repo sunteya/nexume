@@ -11,6 +11,7 @@ import { createCollectorSocketServer } from "./collector-socket"
 import { createRequestHandler } from "./http"
 import { SessionSyncService } from "./session-sync"
 import { ProjectManagementService } from "./project-management"
+import { SessionManagementService } from "./session-management"
 
 export interface StartServerRuntimeOptions {
   accessToken: string
@@ -79,6 +80,13 @@ export function startServerRuntime(options: StartServerRuntimeOptions) {
     isInitialized: () => options.storage.initialization.getStatus().initialized,
     onError: options.onError,
   })
+  const sessions = new SessionManagementService({
+    sessions: options.storage.sessions,
+    collectors: options.storage.collectors,
+    localSources: options.localSources,
+    updateRemote: (collectorId, request) =>
+      collectorSockets.updateSessionTitle(collectorId, request),
+  })
   collectors.setRemoteDisconnect(collectorSockets.disconnectCollector)
   collectors.setSyncTrigger((id) => {
     if (id === "local") {
@@ -106,6 +114,7 @@ export function startServerRuntime(options: StartServerRuntimeOptions) {
       },
     },
     collectors,
+    sessions,
     projects,
     getRuntimeInfo: () =>
       options.getRuntimeInfo?.(server.port ?? options.port) ?? {
@@ -146,6 +155,7 @@ export function startServerRuntime(options: StartServerRuntimeOptions) {
     server,
     core,
     collectors,
+    sessions,
     createBootstrapUrl(host = "127.0.0.1"): string {
       return `http://${host}:${server.port ?? options.port}/#accessToken=${encodeURIComponent(options.accessToken)}`
     },

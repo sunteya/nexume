@@ -8,6 +8,7 @@ import {
   assertListSessionsParams,
   assertProjectInput,
   assertSessionSyncBatchRequest,
+  assertUpdateSessionTitleRequest,
 } from "./index"
 
 describe("Session query contracts", () => {
@@ -130,6 +131,27 @@ describe("assertCollectorDescriptor", () => {
 })
 
 describe("Session sync contracts", () => {
+  test("validates optimistic Session title updates", () => {
+    expect(() =>
+      assertUpdateSessionTitleRequest({
+        agent: "codex",
+        id: "session-1",
+        title: "New title",
+        expectedTitle: "Old title",
+        expectedUpdatedAt: 200,
+      }),
+    ).not.toThrow()
+    expect(() =>
+      assertUpdateSessionTitleRequest({
+        agent: "codex",
+        id: "session-1",
+        title: "   ",
+        expectedTitle: "Old title",
+        expectedUpdatedAt: 200,
+      }),
+    ).toThrow("Session 标题修改参数无效")
+  })
+
   test("validates a begin request and normalized batch", () => {
     expect(() =>
       assertBeginSessionSyncRequest({

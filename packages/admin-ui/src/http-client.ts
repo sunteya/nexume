@@ -17,6 +17,7 @@ import type {
   RenameCollectorInput,
   RuntimeInfo,
   SessionBatch,
+  SessionSummary,
 } from "@nexume/contracts"
 
 interface ApiErrorBody {
@@ -108,6 +109,35 @@ export function createHttpSessionClient(
       }
 
       return (await response.json()) as SessionBatch
+    },
+
+    async updateSessionTitle(collectorId, input) {
+      const path = [collectorId, input.agent, input.id]
+        .map(encodeURIComponent)
+        .join("/")
+      const response = await fetch(`/api/sessions/${path}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: input.title,
+          expectedTitle: input.expectedTitle,
+          expectedUpdatedAt: input.expectedUpdatedAt,
+        }),
+      })
+      if (response.status === 401) {
+        onUnauthorized()
+        throw new Error("The access token is invalid.")
+      }
+      if (!response.ok) {
+        throw await responseError(
+          response,
+          "Unable to update the session title.",
+        )
+      }
+      return (await response.json()) as SessionSummary
     },
   }
 }

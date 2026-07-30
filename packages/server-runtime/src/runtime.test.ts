@@ -3,7 +3,11 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { CollectorConnection } from "@nexume/collector-core"
+import {
+  CollectorConnection,
+  SessionTitleConflictError,
+  type WritableCollectorDataSource,
+} from "@nexume/collector-core"
 import { openStorage } from "@nexume/storage"
 
 import { startServerRuntime } from "./runtime"
@@ -87,6 +91,43 @@ describe("startServerRuntime", () => {
     }
 
     let syncError: unknown
+    let sessionTitle = "Remote Session"
+    const source: WritableCollectorDataSource = {
+      agent: "opencode",
+      checkpointFormat: "opencode/test/v1",
+      available: true,
+      readSessionPage: () => ({
+        items: [
+          {
+            id: "session-1",
+            agent: "opencode",
+            title: sessionTitle,
+            directory: "/workspace/remote",
+            createdAt: 100,
+            updatedAt: 100,
+          },
+        ],
+        checkpoint: { format: "opencode/test/v1", value: "complete" },
+        hasMore: false,
+      }),
+      updateSessionTitle(input) {
+        if (
+          input.expectedTitle !== sessionTitle ||
+          input.expectedUpdatedAt !== 100
+        ) {
+          throw new SessionTitleConflictError()
+        }
+        sessionTitle = input.title
+        return {
+          id: "session-1",
+          agent: "opencode",
+          title: sessionTitle,
+          directory: "/workspace/remote",
+          createdAt: 100,
+          updatedAt: 100,
+        }
+      },
+    }
     const connection = new CollectorConnection({
       serverUrl: origin,
       token: credential.token,
@@ -95,14 +136,7 @@ describe("startServerRuntime", () => {
         version: "0.0.1",
         agents: ["opencode"],
       },
-      sources: [
-        {
-          agent: "opencode",
-          checkpointFormat: "opencode/test/v1",
-          available: true,
-          readSessionPage: () => ({ items: [], hasMore: false }),
-        },
-      ],
+      sources: [source],
       onSyncError(_agent, error) {
         syncError = error
       },
@@ -117,8 +151,53 @@ describe("startServerRuntime", () => {
       return state?.activeRunId === null
     })
 
+    const renamed = await fetch(
+      `${origin}/api/sessions/${credential.collector.id}/opencode/session-1`,
+      {
+        method: "PATCH",
+        headers: { ...authorization, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "Renamed Session",
+          expectedTitle: "Remote Session",
+          expectedUpdatedAt: 100,
+        }),
+      },
+    )
+    expect(renamed.status).toBe(200)
+    expect(await renamed.json()).toEqual(
+      expect.objectContaining({ title: "Renamed Session" }),
+    )
+    expect(sessionTitle).toBe("Renamed Session")
+
+    const conflict = await fetch(
+      `${origin}/api/sessions/${credential.collector.id}/opencode/session-1`,
+      {
+        method: "PATCH",
+        headers: { ...authorization, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "Stale Session",
+          expectedTitle: "Remote Session",
+          expectedUpdatedAt: 100,
+        }),
+      },
+    )
+    expect(conflict.status).toBe(409)
+
     connection.disconnect()
     await waitFor(() => runtime.core.listCollectors().length === 0)
+    const offline = await fetch(
+      `${origin}/api/sessions/${credential.collector.id}/opencode/session-1`,
+      {
+        method: "PATCH",
+        headers: { ...authorization, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "Offline Session",
+          expectedTitle: "Renamed Session",
+          expectedUpdatedAt: 100,
+        }),
+      },
+    )
+    expect(offline.status).toBe(503)
     await runtime.close()
     await runtime.close()
     const replacement = Bun.serve({

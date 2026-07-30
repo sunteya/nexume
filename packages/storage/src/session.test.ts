@@ -167,6 +167,27 @@ describe("session storage", () => {
     storage.close()
   })
 
+  test("does not replace newer cached data with an older sync row", async () => {
+    const storage = await createStorage()
+    sync(storage, {
+      runId: "newer",
+      items: [item("one", 20, { title: "Newer" })],
+    })
+    sync(storage, {
+      runId: "older",
+      items: [item("one", 10, { title: "Older" })],
+    })
+
+    expect(
+      storage.sessions.get({
+        collectorId: "collector-a",
+        agent: "opencode",
+        sourceId: "one",
+      }),
+    ).toEqual(expect.objectContaining({ title: "Newer", sourceUpdatedAt: 20 }))
+    storage.close()
+  })
+
   test("does not delete on interrupted reconcile and deletes only on completion", async () => {
     const storage = await createStorage()
     sync(storage, {

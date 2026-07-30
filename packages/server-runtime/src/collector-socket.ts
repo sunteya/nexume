@@ -6,6 +6,8 @@ import {
   type CollectorToServerEvents,
   type InterServerEvents,
   type ServerToCollectorEvents,
+  type UpdateSessionTitleRequest,
+  type UpdateSessionTitleResponse,
 } from "@nexume/contracts"
 import {
   CollectorRegistrationError,
@@ -143,6 +145,19 @@ export function createCollectorSocketServer(
       if (!socket?.connected) return false
       socket.emit("sessions:sync:request")
       return true
+    },
+    async updateSessionTitle(
+      id: string,
+      request: UpdateSessionTitleRequest,
+    ): Promise<UpdateSessionTitleResponse | undefined> {
+      const socket = sockets.get(id)
+      if (!socket?.connected) return undefined
+      return (await socket
+        .timeout(10_000)
+        .emitWithAck(
+          "sessions:title:update",
+          request,
+        )) as UpdateSessionTitleResponse
     },
     async close(): Promise<void> {
       io.disconnectSockets(true)

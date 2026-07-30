@@ -4,7 +4,7 @@ Nexume 服务端的运行入口，也是 Docker 镜像的构建入口。
 
 主要负责托管共享 Server Runtime，启动 HTTP、Web 和 Socket.IO 服务，管理远程 Collector，并可按配置启用当前环境的本地采集能力。
 
-Server 启动时首先迁移自己的 SQLite 数据库。首次启动需要在 Web 页面完成初始化，可选择是否同时创建进程内 OpenCode Collector。之后可在 Collectors 页面创建、改名、删除本机或远程 Collector，并查看远程 Collector 的独立连接 token。Session 暂不在 Server 持久化，每次查询由全部在线 Collector 本地执行并由 Server 汇总。
+Server 启动时首先迁移自己的 SQLite 数据库。首次启动需要在 Web 页面完成初始化，可选择是否同时创建进程内本地 Collector。之后可在 Collectors 页面创建、改名、删除本机或远程 Collector，并查看远程 Collector 的独立连接 token。本地 Collector 会读取当前环境中的 OpenCode 和 Alma Session。
 
 ## 开发
 
@@ -23,6 +23,6 @@ NEXUME_ACCESS_TOKEN=your-access-token \
 bun run start
 ```
 
-Server 默认监听 `0.0.0.0:3000`，并将数据库与缓存写入当前工作目录下的 `data`。可通过 `HOST`、`PORT`、`NEXUME_DATA_DIR` 和 `OPENCODE_DB_PATH` 修改监听地址、端口、数据目录和内部 OpenCode Collector 数据库路径。Web/API 与首次初始化使用 `NEXUME_ACCESS_TOKEN` 认证。远程 Collector 使用管理页面生成的独立 token，通过默认 Socket.IO namespace 和 `/socket.io` path 连接。
+Server 默认监听 `0.0.0.0:3000`，并将数据库与缓存写入当前工作目录下的 `data`。可通过 `HOST`、`PORT`、`NEXUME_DATA_DIR`、`OPENCODE_DB_PATH` 和 `ALMA_DB_PATH` 修改监听地址、端口、数据目录及本地 Session 数据库路径。Web/API 与首次初始化使用 `NEXUME_ACCESS_TOKEN` 认证。远程 Collector 使用管理页面生成的独立 token，通过默认 Socket.IO namespace 和 `/socket.io` path 连接。
 
 `GET /api/collectors` 返回已配置的 Collector 和在线状态；`GET /api/sessions?limit=50&cursor=...` 使用游标加载汇总 Session。

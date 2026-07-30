@@ -20,3 +20,8 @@ export {
   getOpenCodeDatabasePath,
   type OpenCodeCollectorOptions,
 } from "./opencode";
+export {
+  AlmaCollector,
+  getAlmaDatabasePath,
+  type AlmaCollectorOptions,
+} from "./alma";

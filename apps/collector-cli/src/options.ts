@@ -2,12 +2,14 @@ export interface CollectorCliOptions {
   serverUrl: string;
   token: string;
   databasePath?: string;
+  almaDatabasePath?: string;
 }
 
 const optionNames = new Set([
   "--server-url",
   "--token",
   "--db-path",
+  "--alma-db-path",
 ]);
 
 const usage = `Usage:
@@ -15,6 +17,7 @@ const usage = `Usage:
 
 Options:
   --db-path <path>      Path to the OpenCode SQLite database.
+  --alma-db-path <path> Path to the Alma SQLite database.
   --help                Show this help message.`;
 
 export class CollectorCliUsageError extends Error {
@@ -76,5 +79,6 @@ export function parseCollectorCliOptions(args: string[]): CollectorCliOptions {
     serverUrl,
     token,
     databasePath: values.get("--db-path"),
+    almaDatabasePath: values.get("--alma-db-path"),
   };
 }

@@ -8,6 +8,11 @@ The first phase focuses on unified session management, including local and remot
 
 Nexume is planned to support desktop, server, Docker, and CLI use cases on Windows, macOS, and Linux.
 
+## Supported Agents
+
+- OpenCode
+- Alma
+
 ## Status
 
-The project is in early implementation. Desktop supports local read-only OpenCode browsing. Server starts an internal OpenCode Collector and accepts authenticated remote Collectors over Socket.IO; it merges live collector queries with cursor-based loading. Session persistence, Codex, MCP, search, and full management capabilities remain planned work.
+The project is in early implementation. Desktop supports local read-only OpenCode and Alma browsing. Server starts internal local collectors and accepts authenticated remote Collectors over Socket.IO; it merges collector data with cursor-based loading. Codex, MCP, search, and full management capabilities remain planned work.

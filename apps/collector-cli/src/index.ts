@@ -1,6 +1,7 @@
 import { hostname } from "node:os";
 
 import {
+  AlmaCollector,
   CollectorConnection,
   OpenCodeCollector,
 } from "@nexume/collector-core";
@@ -21,18 +22,19 @@ try {
   process.exit(error instanceof CollectorCliUsageError ? 2 : 1);
 }
 
-const collector = new OpenCodeCollector({
-  databasePath: options.databasePath,
-});
+const sources = [
+  new OpenCodeCollector({ databasePath: options.databasePath }),
+  new AlmaCollector({ databasePath: options.almaDatabasePath }),
+];
 const connection = new CollectorConnection({
   serverUrl: options.serverUrl,
   token: options.token,
   metadata: {
     hostname: hostname(),
     version: packageJson.version,
-    agents: ["opencode"],
+    agents: sources.map((source) => source.agent),
   },
-  sources: [collector],
+  sources,
   onStateChange(state, detail) {
     console.log(
       `[collector] ${state}${detail ? `: ${detail}` : ""}`,
@@ -43,11 +45,13 @@ const connection = new CollectorConnection({
   },
 });
 
-console.log(
-  collector.available
-    ? `[collector] OpenCode: ${collector.databasePath}`
-    : `[collector] OpenCode database is unavailable: ${collector.databasePath}`,
-);
+for (const source of sources) {
+  console.log(
+    source.available
+      ? `[collector] ${source.agent}: ${source.databasePath}`
+      : `[collector] ${source.agent} database is unavailable: ${source.databasePath}`,
+  );
+}
 connection.connect();
 
 function stop(): void {

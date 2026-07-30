@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { hostname as getHostname } from "node:os";
 
-import { OpenCodeCollector } from "@nexume/collector-core";
+import { AlmaCollector, OpenCodeCollector } from "@nexume/collector-core";
 import { startServerRuntime } from "@nexume/server-runtime";
 import { openStorage } from "@nexume/storage";
 import packageJson from "../package.json";
@@ -24,20 +24,21 @@ const hostname = process.env.HOST?.trim() || "0.0.0.0";
 const port = readPort(process.env.PORT);
 const dataDir = resolve(process.env.NEXUME_DATA_DIR?.trim() || "data");
 const storage = await openStorage({ dataDir });
-const collector = new OpenCodeCollector({
-  databasePath: process.env.OPENCODE_DB_PATH,
-});
+const sources = [
+  new OpenCodeCollector({ databasePath: process.env.OPENCODE_DB_PATH }),
+  new AlmaCollector({ databasePath: process.env.ALMA_DB_PATH }),
+];
 const runtime = startServerRuntime({
   accessToken,
   storage,
   hostname,
   port,
   webRoot: resolve(import.meta.dir, "../dist"),
-  localSources: [collector],
+  localSources: sources,
   localMetadata: {
     hostname: getHostname(),
     version: packageJson.version,
-    agents: ["opencode"],
+    agents: sources.map((source) => source.agent),
   },
   defaultLocalCollectorName: "Server Local",
   getRuntimeInfo: (actualPort) => ({
@@ -50,11 +51,13 @@ const runtime = startServerRuntime({
 
 console.log(`Nexume Server: http://${hostname}:${runtime.server.port}`);
 console.log(`Data: ${storage.dataDir}`);
-console.log(
-  collector.available
-    ? `OpenCode: ${collector.databasePath}`
-    : `OpenCode 数据库暂不可用: ${collector.databasePath}`,
-);
+for (const source of sources) {
+  console.log(
+    source.available
+      ? `${source.agent}: ${source.databasePath}`
+      : `${source.agent} 数据库暂不可用: ${source.databasePath}`,
+  );
+}
 
 async function stop(): Promise<void> {
   await runtime.close();

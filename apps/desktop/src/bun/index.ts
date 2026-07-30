@@ -4,16 +4,17 @@ import { resolve } from "node:path";
 
 import Electrobun, { BrowserWindow, Utils } from "electrobun/bun";
 
-import { OpenCodeCollector } from "@nexume/collector-core";
+import { AlmaCollector, OpenCodeCollector } from "@nexume/collector-core";
 import { startServerRuntime } from "@nexume/server-runtime";
 import { openStorage } from "@nexume/storage";
 import packageJson from "../../package.json";
 
 const port = 0;
 const storage = await openStorage({ dataDir: Utils.paths.userData });
-const collector = new OpenCodeCollector({
-  databasePath: process.env.OPENCODE_DB_PATH,
-});
+const sources = [
+  new OpenCodeCollector({ databasePath: process.env.OPENCODE_DB_PATH }),
+  new AlmaCollector({ databasePath: process.env.ALMA_DB_PATH }),
+];
 const accessToken = `nxa_${randomBytes(32).toString("base64url")}`;
 
 if (
@@ -39,11 +40,11 @@ const runtime = startServerRuntime({
   hostname: "0.0.0.0",
   port,
   webRoot: resolve(import.meta.dir, "../web"),
-  localSources: [collector],
+  localSources: sources,
   localMetadata: {
     hostname: hostname(),
     version: packageJson.version,
-    agents: ["opencode"],
+    agents: sources.map((source) => source.agent),
   },
   defaultLocalCollectorName: "Desktop Local",
   getRuntimeInfo: (actualPort) => ({

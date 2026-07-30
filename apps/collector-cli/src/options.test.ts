@@ -14,12 +14,15 @@ describe("parseCollectorCliOptions", () => {
         "/data/opencode.db",
         "--alma-db-path",
         "/data/alma.db",
+        "--codex-db-path",
+        "/data/codex.db",
       ]),
     ).toEqual({
       serverUrl: "https://nexume.example.com",
       token: "collector-token",
       databasePath: "/data/opencode.db",
       almaDatabasePath: "/data/alma.db",
+      codexDatabasePath: "/data/codex.db",
     })
   })
 

@@ -1,7 +1,11 @@
 import { resolve } from "node:path"
 import { hostname as getHostname } from "node:os"
 
-import { AlmaCollector, OpenCodeCollector } from "@nexume/collector-core"
+import {
+  AlmaCollector,
+  CodexCollector,
+  OpenCodeCollector,
+} from "@nexume/collector-core"
 import { startServerRuntime } from "@nexume/server-runtime"
 import { openStorage } from "@nexume/storage"
 import packageJson from "../package.json"
@@ -27,6 +31,7 @@ const storage = await openStorage({ dataDir })
 const sources = [
   new OpenCodeCollector({ databasePath: process.env.OPENCODE_DB_PATH }),
   new AlmaCollector({ databasePath: process.env.ALMA_DB_PATH }),
+  new CodexCollector({ databasePath: process.env.CODEX_DB_PATH }),
 ]
 const runtime = startServerRuntime({
   accessToken,

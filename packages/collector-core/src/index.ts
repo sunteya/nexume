@@ -25,3 +25,8 @@ export {
   getAlmaDatabasePath,
   type AlmaCollectorOptions,
 } from "./alma"
+export {
+  CodexCollector,
+  getCodexDatabasePath,
+  type CodexCollectorOptions,
+} from "./codex"

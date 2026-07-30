@@ -10,9 +10,10 @@ Nexume is planned to support desktop, server, Docker, and CLI use cases on Windo
 
 ## Supported Agents
 
+- Codex, including Codex history in the renamed ChatGPT desktop app
 - OpenCode
 - Alma
 
 ## Status
 
-The project is in early implementation. Desktop supports local read-only OpenCode and Alma browsing. Server starts internal local collectors and accepts authenticated remote Collectors over Socket.IO; it merges collector data with cursor-based loading. Codex, MCP, search, and full management capabilities remain planned work.
+The project is in early implementation. Desktop supports local read-only Codex, OpenCode, and Alma browsing. Server starts internal local collectors and accepts authenticated remote Collectors over Socket.IO; it merges collector data with cursor-based loading. MCP, search, and full management capabilities remain planned work.

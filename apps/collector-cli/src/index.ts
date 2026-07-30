@@ -2,6 +2,7 @@ import { hostname } from "node:os"
 
 import {
   AlmaCollector,
+  CodexCollector,
   CollectorConnection,
   OpenCodeCollector,
 } from "@nexume/collector-core"
@@ -25,6 +26,7 @@ try {
 const sources = [
   new OpenCodeCollector({ databasePath: options.databasePath }),
   new AlmaCollector({ databasePath: options.almaDatabasePath }),
+  new CodexCollector({ databasePath: options.codexDatabasePath }),
 ]
 const connection = new CollectorConnection({
   serverUrl: options.serverUrl,

@@ -4,7 +4,7 @@
 
 应用组合共享的 Server Runtime、Collector Core 和 Admin UI，在不依赖外部 Server 的情况下提供本地与远程采集、Session 管理和浏览器访问能力。
 
-桌面端默认只读采集本机 OpenCode 和 Alma Session。可通过 `OPENCODE_DB_PATH` 和 `ALMA_DB_PATH` 覆盖数据库路径。
+桌面端默认只读采集本机 Codex、OpenCode 和 Alma Session。Codex 包括更名后的 ChatGPT 桌面应用中的 Codex 历史，优先读取有效的 `$CODEX_HOME/state_5.sqlite`，否则读取 `~/.codex/state_5.sqlite`；普通 ChatGPT 聊天历史不在采集范围内。可通过 `CODEX_DB_PATH`、`OPENCODE_DB_PATH` 和 `ALMA_DB_PATH` 覆盖数据库路径。
 
 当前项目使用 Electrobun、Vue 3、TypeScript 和 Vite。应用启动时由操作系统分配一个可用端口，并在 `0.0.0.0` 上提供 Web、`/api/*` 和 `/socket.io`。每次启动生成一个随机 access token，并通过 URL fragment 交给访问实际端口的原生窗口。该 token 不持久化也不在管理页面展示。远程 Collector 使用管理页面生成的独立 token 连接。关闭窗口会同时停止内嵌 Server。
 

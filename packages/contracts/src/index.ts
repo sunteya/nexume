@@ -27,9 +27,37 @@ export interface ListSessionsParams {
   limit: SessionBatchSize
   cursor?: string
   collectorId?: string
+  projectId?: string
+  unassigned?: boolean
   agent?: AgentId
   title?: string
   status?: SessionStatus
+}
+
+export interface ProjectDirectory {
+  collectorId: string
+  directory: string
+}
+
+export interface ProjectInfo {
+  id: string
+  name: string
+  directories: ProjectDirectory[]
+  createdAt: number
+  updatedAt: number
+}
+
+export interface CreateProjectInput {
+  name: string
+  directories: ProjectDirectory[]
+}
+
+export type UpdateProjectInput = CreateProjectInput
+
+export interface AvailableSessionDirectory extends ProjectDirectory {
+  collectorName: string
+  projectId?: string
+  projectName?: string
 }
 
 export interface CollectorQueryWarning {
@@ -204,6 +232,18 @@ export function assertListSessionsParams(
   }
   if (params.collectorId !== undefined && !params.collectorId.trim()) {
     throw new Error("Collector ID 无效。")
+  }
+  if (params.projectId !== undefined && !params.projectId.trim()) {
+    throw new Error("Project ID 无效。")
+  }
+  if (
+    params.unassigned !== undefined &&
+    typeof params.unassigned !== "boolean"
+  ) {
+    throw new Error("未归类筛选条件无效。")
+  }
+  if (params.projectId !== undefined && params.unassigned) {
+    throw new Error("Project 与未归类筛选条件不能同时使用。")
   }
   if (params.agent !== undefined) assertAgentId(params.agent)
   if (
@@ -396,6 +436,43 @@ export function assertCollectorSocketAuth(
 export function assertCollectorName(value: unknown): asserts value is string {
   if (typeof value !== "string" || !value.trim() || value.trim().length > 128) {
     throw new Error("Collector 名称必须是 1 到 128 个字符。")
+  }
+}
+
+export function assertProjectName(value: unknown): asserts value is string {
+  if (typeof value !== "string" || !value.trim() || value.trim().length > 128) {
+    throw new Error("Project 名称必须是 1 到 128 个字符。")
+  }
+}
+
+export function assertProjectInput(
+  value: unknown,
+): asserts value is CreateProjectInput {
+  if (!value || typeof value !== "object") {
+    throw new Error("Project 参数无效。")
+  }
+  const input = value as Partial<CreateProjectInput>
+  assertProjectName(input.name)
+  if (!Array.isArray(input.directories) || input.directories.length > 1_000) {
+    throw new Error("Project 目录列表无效。")
+  }
+
+  const unique = new Set<string>()
+  for (const item of input.directories) {
+    if (
+      !item ||
+      typeof item !== "object" ||
+      typeof item.collectorId !== "string" ||
+      !item.collectorId.trim() ||
+      typeof item.directory !== "string" ||
+      !item.directory ||
+      item.directory.length > 8_192
+    ) {
+      throw new Error("Project 目录无效。")
+    }
+    const key = `${item.collectorId}\u0000${item.directory}`
+    if (unique.has(key)) throw new Error("Project 目录不能重复。")
+    unique.add(key)
   }
 }
 

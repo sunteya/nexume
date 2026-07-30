@@ -2,7 +2,11 @@ import { randomBytes } from "node:crypto"
 import { hostname, networkInterfaces } from "node:os"
 import { resolve } from "node:path"
 
-import Electrobun, { BrowserWindow, Utils } from "electrobun/bun"
+import Electrobun, {
+  ApplicationMenu,
+  BrowserWindow,
+  Utils,
+} from "electrobun/bun"
 
 import {
   AlmaCollector,
@@ -21,6 +25,43 @@ const sources = [
   new CodexCollector({ databasePath: process.env.CODEX_DB_PATH }),
 ]
 const accessToken = `nxa_${randomBytes(32).toString("base64url")}`
+
+ApplicationMenu.setApplicationMenu([
+  {
+    submenu: [
+      { role: "about" },
+      { type: "separator" },
+      { role: "hide" },
+      { role: "hideOthers" },
+      { role: "showAll" },
+      { type: "separator" },
+      { role: "quit" },
+    ],
+  },
+  {
+    label: "Edit",
+    submenu: [
+      { role: "undo" },
+      { role: "redo" },
+      { type: "separator" },
+      { role: "cut" },
+      { role: "copy" },
+      { role: "paste" },
+      { role: "pasteAndMatchStyle" },
+      { role: "delete" },
+      { role: "selectAll" },
+    ],
+  },
+  {
+    label: "Window",
+    submenu: [
+      { role: "minimize" },
+      { role: "zoom" },
+      { type: "separator" },
+      { role: "bringAllToFront" },
+    ],
+  },
+])
 
 if (
   storage.initialization.getStatus().initialized &&

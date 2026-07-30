@@ -326,6 +326,99 @@ describe("session storage", () => {
     storage.close()
   })
 
+  test("matches project directories exactly and lists unassigned sessions", async () => {
+    const storage = await createStorage()
+    storage.projects.create({
+      id: "project-a",
+      name: "Project A",
+      directories: [{ collectorId: "collector-a", directory: "/work/project" }],
+    })
+    sync(storage, {
+      runId: "project-a-sessions",
+      items: [
+        item("assigned", 30, { directory: "/work/project" }),
+        item("child", 20, { directory: "/work/project/subdirectory" }),
+      ],
+    })
+    sync(storage, {
+      collectorId: "collector-b",
+      runId: "collector-b-sessions",
+      items: [item("other-collector", 10, { directory: "/work/project" })],
+    })
+
+    expect(
+      storage.sessions
+        .list({ projectId: "project-a", limit: 10 })
+        .items.map((row) => row.sourceId),
+    ).toEqual(["assigned"])
+    expect(
+      storage.sessions
+        .list({ unassigned: true, limit: 10 })
+        .items.map((row) => row.sourceId),
+    ).toEqual(["child", "other-collector"])
+    storage.close()
+  })
+
+  test("lists available directories with their associated projects", async () => {
+    const storage = await createStorage()
+    storage.projects.create({
+      id: "project-a",
+      name: "Project A",
+      directories: [
+        { collectorId: "collector-a", directory: "/work/assigned" },
+        { collectorId: "collector-b", directory: "/srv/assigned" },
+      ],
+    })
+    sync(storage, {
+      runId: "available-a",
+      items: [
+        item("assigned-a", 30, { directory: "/work/assigned" }),
+        item("unassigned-a", 20, { directory: "/work/unassigned" }),
+        item("archived-a", 10, {
+          directory: "/work/archived",
+          sourceArchivedAt: 11,
+        }),
+      ],
+    })
+    sync(storage, {
+      collectorId: "collector-b",
+      runId: "available-b",
+      items: [item("assigned-b", 40, { directory: "/srv/assigned" })],
+    })
+
+    expect(storage.sessions.listAvailableDirectories()).toEqual([
+      {
+        collectorId: "collector-a",
+        collectorName: "Collector A",
+        directory: "/work/archived",
+        projectId: null,
+        projectName: null,
+      },
+      {
+        collectorId: "collector-a",
+        collectorName: "Collector A",
+        directory: "/work/assigned",
+        projectId: "project-a",
+        projectName: "Project A",
+      },
+      {
+        collectorId: "collector-a",
+        collectorName: "Collector A",
+        directory: "/work/unassigned",
+        projectId: null,
+        projectName: null,
+      },
+      {
+        collectorId: "collector-b",
+        collectorName: "Collector B",
+        directory: "/srv/assigned",
+        projectId: "project-a",
+        projectName: "Project A",
+      },
+    ])
+    storage.close()
+  })
+
   test("persists sessions, checkpoints, active runs, and batch idempotency", async () => {
     const dataDir = createDataDir()
     const first = await createStorage(dataDir)

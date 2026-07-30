@@ -171,7 +171,7 @@ describe("Server HTTP API", () => {
     })
     const response = await handler(
       new Request(
-        "http://localhost/api/sessions?limit=20&cursor=opaque&collectorId=collector-a&agent=codex&title=release%20notes&status=archived",
+        "http://localhost/api/sessions?limit=20&cursor=opaque&collectorId=collector-a&projectId=project-a&agent=codex&title=release%20notes&status=archived",
         {
           headers: authorization,
         },
@@ -183,6 +183,8 @@ describe("Server HTTP API", () => {
       limit: 20,
       cursor: "opaque",
       collectorId: "collector-a",
+      projectId: "project-a",
+      unassigned: undefined,
       agent: "codex",
       title: "release notes",
       status: "archived",
@@ -201,6 +203,160 @@ describe("Server HTTP API", () => {
     )
 
     expect(response.status).toBe(400)
+  })
+
+  test("passes an unassigned Session query and rejects conflicting scopes", async () => {
+    let received: unknown
+    const handler = createRequestHandler({
+      accessToken: token,
+      core: createCore(async (params) => {
+        received = params
+        return { items: [], hasMore: false, warnings: [] }
+      }),
+    })
+
+    const response = await handler(
+      new Request("http://localhost/api/sessions?unassigned=true", {
+        headers: authorization,
+      }),
+    )
+    expect(response.status).toBe(200)
+    expect(received).toEqual({
+      limit: 50,
+      cursor: undefined,
+      collectorId: undefined,
+      projectId: undefined,
+      unassigned: true,
+      agent: undefined,
+      title: undefined,
+      status: undefined,
+    })
+
+    const conflicting = await handler(
+      new Request(
+        "http://localhost/api/sessions?projectId=project-a&unassigned=true",
+        { headers: authorization },
+      ),
+    )
+    expect(conflicting.status).toBe(400)
+  })
+
+  test("lists Projects and available Session directories", async () => {
+    const project = {
+      id: "project-1",
+      name: "Nexume",
+      directories: [{ collectorId: "local", directory: "/workspace/nexume" }],
+      createdAt: 100,
+      updatedAt: 100,
+    }
+    const directory = {
+      collectorId: "local",
+      collectorName: "Local",
+      directory: "/workspace/nexume",
+      projectId: "project-1",
+      projectName: "Nexume",
+    }
+    const handler = createRequestHandler({
+      accessToken: token,
+      core: createCore(),
+      projects: {
+        list: () => [project],
+        create: () => project,
+        update: () => project,
+        delete: () => {},
+        listDirectories: () => [directory],
+      },
+    })
+
+    const projects = await handler(
+      new Request("http://localhost/api/projects", { headers: authorization }),
+    )
+    expect(projects.status).toBe(200)
+    expect(await projects.json()).toEqual({ items: [project] })
+
+    const directories = await handler(
+      new Request("http://localhost/api/session-directories", {
+        headers: authorization,
+      }),
+    )
+    expect(directories.status).toBe(200)
+    expect(await directories.json()).toEqual({ items: [directory] })
+  })
+
+  test("creates, updates and deletes a Project", async () => {
+    const calls: string[] = []
+    const project = {
+      id: "project-1",
+      name: "Nexume",
+      directories: [{ collectorId: "local", directory: "/workspace/nexume" }],
+      createdAt: 100,
+      updatedAt: 100,
+    }
+    const handler = createRequestHandler({
+      accessToken: token,
+      core: createCore(),
+      projects: {
+        list: () => [],
+        create: (input) => {
+          calls.push(`create:${input.name}:${input.directories[0]?.directory}`)
+          return project
+        },
+        update: (id, input) => {
+          calls.push(`update:${id}:${input.name}`)
+          return {
+            ...project,
+            name: input.name,
+            directories: input.directories,
+          }
+        },
+        delete: (id) => {
+          calls.push(`delete:${id}`)
+        },
+        listDirectories: () => [],
+      },
+    })
+
+    const created = await handler(
+      new Request("http://localhost/api/projects", {
+        method: "POST",
+        headers: { ...authorization, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Nexume",
+          directories: [
+            { collectorId: "local", directory: "/workspace/nexume" },
+          ],
+        }),
+      }),
+    )
+    expect(created.status).toBe(201)
+    expect(await created.json()).toEqual(project)
+
+    const updated = await handler(
+      new Request("http://localhost/api/projects/project-1", {
+        method: "PATCH",
+        headers: { ...authorization, "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Renamed", directories: [] }),
+      }),
+    )
+    expect(updated.status).toBe(200)
+    expect(await updated.json()).toEqual({
+      ...project,
+      name: "Renamed",
+      directories: [],
+    })
+
+    const deleted = await handler(
+      new Request("http://localhost/api/projects/project-1", {
+        method: "DELETE",
+        headers: authorization,
+      }),
+    )
+    expect(deleted.status).toBe(204)
+    expect(calls).toEqual([
+      "create:Nexume:/workspace/nexume",
+      "update:project-1:Renamed",
+      "delete:project-1",
+    ])
   })
 
   test("returns the managed Collector list", async () => {

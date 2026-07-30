@@ -10,6 +10,7 @@ import { CollectorManagementService } from "./collector-management"
 import { createCollectorSocketServer } from "./collector-socket"
 import { createRequestHandler } from "./http"
 import { SessionSyncService } from "./session-sync"
+import { ProjectManagementService } from "./project-management"
 
 export interface StartServerRuntimeOptions {
   accessToken: string
@@ -42,6 +43,10 @@ export function startServerRuntime(options: StartServerRuntimeOptions) {
     },
   })
   const sessionSync = new SessionSyncService(options.storage.sessionSync)
+  const projects = new ProjectManagementService(
+    options.storage.projects,
+    options.storage.sessions,
+  )
   const localSync = new CollectorSyncRunner({
     sources: options.localSources,
     onError: (_agent, error) => options.onError?.(error),
@@ -101,6 +106,7 @@ export function startServerRuntime(options: StartServerRuntimeOptions) {
       },
     },
     collectors,
+    projects,
     getRuntimeInfo: () =>
       options.getRuntimeInfo?.(server.port ?? options.port) ?? {
         kind: "server",

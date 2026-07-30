@@ -1,127 +1,161 @@
 <script setup lang="ts">
 import {
   type CollectorClient,
+  type ProjectClient,
   type SessionClient,
-} from "./client";
-import { ElButton, ElConfigProvider, ElInput } from "element-plus";
-import en from "element-plus/es/locale/lang/en";
-import { KeyRound } from "lucide-vue-next";
-import { ref, shallowRef } from "vue";
+} from "./client"
+import { ElButton, ElConfigProvider, ElInput } from "element-plus"
+import en from "element-plus/es/locale/lang/en"
+import { KeyRound } from "lucide-vue-next"
+import { ref, shallowRef } from "vue"
 
 import {
   createHttpCollectorClient,
   createHttpInitializationClient,
+  createHttpProjectClient,
   createHttpSessionClient,
-} from "./http-client";
-import CollectorApp from "./CollectorApp.vue";
-import AppTopBar, { type AppMode, type AppView } from "./AppTopBar.vue";
-import AuthLayout from "./AuthLayout.vue";
-import InitializationApp from "./InitializationApp.vue";
-import SessionApp from "./SessionApp.vue";
+} from "./http-client"
+import CollectorApp from "./CollectorApp.vue"
+import AppTopBar, { type AppMode, type AppView } from "./AppTopBar.vue"
+import AuthLayout from "./AuthLayout.vue"
+import InitializationApp from "./InitializationApp.vue"
+import SessionApp from "./SessionApp.vue"
+import ProjectSidebar from "./ProjectSidebar.vue"
 
-const props = withDefaults(
-  defineProps<{ mode?: AppMode }>(),
-  { mode: "server" },
-);
+const props = withDefaults(defineProps<{ mode?: AppMode }>(), {
+  mode: "server",
+})
 
-const storageKey = "nexume.accessToken";
-const accessToken = ref(sessionStorage.getItem(storageKey) ?? "");
-const tokenInput = ref("");
-const authError = ref("");
-const client = shallowRef<SessionClient>();
-const collectorClient = shallowRef<CollectorClient>();
-const activeView = ref<AppView>("sessions");
-const selectedCollectorId = ref("");
-const initializationReady = ref(false);
-const bootstrapReady = ref(false);
+const storageKey = "nexume.accessToken"
+const accessToken = ref(sessionStorage.getItem(storageKey) ?? "")
+const tokenInput = ref("")
+const authError = ref("")
+const client = shallowRef<SessionClient>()
+const collectorClient = shallowRef<CollectorClient>()
+const projectClient = shallowRef<ProjectClient>()
+const activeView = ref<AppView>("sessions")
+const selectedCollectorId = ref("")
+const selectedProjectId = ref<string>()
+const selectedProjectName = ref("Unassigned")
+const projectRevision = ref(0)
+const initializationReady = ref(false)
+const bootstrapReady = ref(false)
 
 function clearAccessToken(): void {
-  sessionStorage.removeItem(storageKey);
-  accessToken.value = "";
-  client.value = undefined;
-  collectorClient.value = undefined;
-  authError.value = "The access token is invalid. Enter a valid token to continue.";
-  selectedCollectorId.value = "";
+  sessionStorage.removeItem(storageKey)
+  accessToken.value = ""
+  client.value = undefined
+  collectorClient.value = undefined
+  projectClient.value = undefined
+  authError.value =
+    "The access token is invalid. Enter a valid token to continue."
+  selectedCollectorId.value = ""
 }
 
-const initializationClient = createHttpInitializationClient(clearAccessToken);
+const initializationClient = createHttpInitializationClient(clearAccessToken)
 
 function disconnect(): void {
-  sessionStorage.removeItem(storageKey);
-  accessToken.value = "";
-  client.value = undefined;
-  collectorClient.value = undefined;
-  authError.value = "";
-  activeView.value = "sessions";
-  selectedCollectorId.value = "";
+  sessionStorage.removeItem(storageKey)
+  accessToken.value = ""
+  client.value = undefined
+  collectorClient.value = undefined
+  projectClient.value = undefined
+  authError.value = ""
+  activeView.value = "sessions"
+  selectedCollectorId.value = ""
 }
 
 function createClient(token: string): SessionClient {
-  return createHttpSessionClient(token, clearAccessToken);
+  return createHttpSessionClient(token, clearAccessToken)
 }
 
 function createCollectorClient(token: string): CollectorClient {
-  return createHttpCollectorClient(token, clearAccessToken);
+  return createHttpCollectorClient(token, clearAccessToken)
+}
+
+function createProjectClient(token: string): ProjectClient {
+  return createHttpProjectClient(token, clearAccessToken)
 }
 
 if (accessToken.value) {
-  client.value = createClient(accessToken.value);
-  collectorClient.value = createCollectorClient(accessToken.value);
+  client.value = createClient(accessToken.value)
+  collectorClient.value = createCollectorClient(accessToken.value)
+  projectClient.value = createProjectClient(accessToken.value)
 }
 
 function connect(): void {
-  const token = tokenInput.value.trim();
+  const token = tokenInput.value.trim()
   if (!token) {
-    authError.value = "Enter an access token.";
-    return;
+    authError.value = "Enter an access token."
+    return
   }
 
-  sessionStorage.setItem(storageKey, token);
-  accessToken.value = token;
-  client.value = createClient(token);
-  collectorClient.value = createCollectorClient(token);
-  tokenInput.value = "";
-  authError.value = "";
-  activeView.value = "sessions";
+  sessionStorage.setItem(storageKey, token)
+  accessToken.value = token
+  client.value = createClient(token)
+  collectorClient.value = createCollectorClient(token)
+  projectClient.value = createProjectClient(token)
+  tokenInput.value = ""
+  authError.value = ""
+  activeView.value = "sessions"
 }
 
 function handleInitialized(token: string): void {
   if (token) {
-    sessionStorage.setItem(storageKey, token);
-    accessToken.value = token;
-    client.value = createClient(token);
-    collectorClient.value = createCollectorClient(token);
+    sessionStorage.setItem(storageKey, token)
+    accessToken.value = token
+    client.value = createClient(token)
+    collectorClient.value = createCollectorClient(token)
+    projectClient.value = createProjectClient(token)
   }
-  initializationReady.value = true;
+  initializationReady.value = true
+}
+
+function selectProject(
+  projectId: string | undefined,
+  projectName: string,
+): void {
+  selectedProjectId.value = projectId
+  selectedProjectName.value = projectName
+  activeView.value = "sessions"
 }
 
 function viewCollectorSessions(collectorId: string): void {
-  selectedCollectorId.value = collectorId;
-  activeView.value = "sessions";
+  selectedCollectorId.value = collectorId
+  activeView.value = "sessions"
 }
 
 function bootstrap(): void {
-  const hash = new URLSearchParams(window.location.hash.slice(1));
-  const token = hash.get("accessToken");
+  const hash = new URLSearchParams(window.location.hash.slice(1))
+  const token = hash.get("accessToken")
   if (!token) {
-    bootstrapReady.value = true;
-    return;
+    bootstrapReady.value = true
+    return
   }
 
-  window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
-  sessionStorage.setItem(storageKey, token);
-  accessToken.value = token;
-  client.value = createClient(token);
-  collectorClient.value = createCollectorClient(token);
-  bootstrapReady.value = true;
+  window.history.replaceState(
+    null,
+    "",
+    `${window.location.pathname}${window.location.search}`,
+  )
+  sessionStorage.setItem(storageKey, token)
+  accessToken.value = token
+  client.value = createClient(token)
+  collectorClient.value = createCollectorClient(token)
+  projectClient.value = createProjectClient(token)
+  bootstrapReady.value = true
 }
 
-bootstrap();
+bootstrap()
 </script>
 
 <template>
   <el-config-provider :locale="en">
-    <auth-layout v-if="!bootstrapReady" description="Connecting to Nexume..." busy />
+    <auth-layout
+      v-if="!bootstrapReady"
+      description="Connecting to Nexume..."
+      busy
+    />
 
     <initialization-app
       v-else-if="!initializationReady"
@@ -132,7 +166,10 @@ bootstrap();
       @initialized="handleInitialized"
     />
 
-    <main v-else-if="client && collectorClient" class="app-shell">
+    <main
+      v-else-if="client && collectorClient && projectClient"
+      class="app-shell"
+    >
       <app-top-bar
         :mode="props.mode"
         :active-view="activeView"
@@ -140,20 +177,31 @@ bootstrap();
         @disconnect="disconnect"
       />
 
-      <keep-alive>
-        <session-app
-          v-if="activeView === 'sessions'"
-          :client="client"
-          :collector-client="collectorClient"
-          :initial-collector-id="selectedCollectorId"
-          @collector-change="selectedCollectorId = $event"
+      <div class="app-workspace">
+        <project-sidebar
+          :client="projectClient"
+          :active-project-id="selectedProjectId"
+          @change="projectRevision++"
+          @select="selectProject"
         />
-        <collector-app
-          v-else
-          :client="collectorClient"
-          @view-sessions="viewCollectorSessions"
-        />
-      </keep-alive>
+        <keep-alive>
+          <session-app
+            v-if="activeView === 'sessions'"
+            :client="client"
+            :collector-client="collectorClient"
+            :initial-collector-id="selectedCollectorId"
+            :project-id="selectedProjectId"
+            :project-name="selectedProjectName"
+            :project-revision="projectRevision"
+            @collector-change="selectedCollectorId = $event"
+          />
+          <collector-app
+            v-else
+            :client="collectorClient"
+            @view-sessions="viewCollectorSessions"
+          />
+        </keep-alive>
+      </div>
     </main>
 
     <auth-layout
@@ -162,7 +210,11 @@ bootstrap();
       description="Restart Nexume Desktop to reconnect."
     />
 
-    <auth-layout v-else title="Connect to Server" description="Enter the administrator access token.">
+    <auth-layout
+      v-else
+      title="Connect to Server"
+      description="Enter the administrator access token."
+    >
       <form class="auth-form" @submit.prevent="connect">
         <el-input
           v-model="tokenInput"
@@ -177,7 +229,9 @@ bootstrap();
             <key-round :size="17" :stroke-width="1.8" />
           </template>
         </el-input>
-        <span v-if="authError" class="auth-error" role="alert">{{ authError }}</span>
+        <span v-if="authError" class="auth-error" role="alert">{{
+          authError
+        }}</span>
         <el-button type="primary" size="large" native-type="submit">
           Connect
         </el-button>

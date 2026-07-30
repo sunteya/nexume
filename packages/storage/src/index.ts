@@ -9,6 +9,7 @@ import { CollectorStore } from "./collector"
 import { SqliteMigrationStorage } from "./migration-storage"
 import { migrations, type MigrationContext } from "./migrations"
 import { SessionStore } from "./session"
+import { ProjectStore } from "./project"
 import { SessionSyncStore } from "./session-sync"
 
 export {
@@ -31,6 +32,7 @@ export {
 export {
   SessionStore,
   type AgentId,
+  type AvailableSessionDirectoryRecord,
   type ListSessionsOptions,
   type SessionKey,
   type SessionListCursor,
@@ -38,6 +40,12 @@ export {
   type SessionRecord,
   type SessionStatus,
 } from "./session"
+export {
+  ProjectStore,
+  type ProjectDirectoryRecord,
+  type ProjectRecord,
+  type SaveProjectInput,
+} from "./project"
 export {
   SessionSyncStore,
   type BeginSessionSyncInput,
@@ -60,6 +68,7 @@ export interface AppStorage {
   db: Database
   initialization: InitializationService
   collectors: CollectorStore
+  projects: ProjectStore
   sessions: SessionStore
   sessionSync: SessionSyncStore
   close(): void
@@ -121,6 +130,7 @@ export async function openStorage(
 
     const collectors = new CollectorStore(db)
     const sessions = new SessionStore(db)
+    const projects = new ProjectStore(db)
     const sessionSync = new SessionSyncStore(db)
     return {
       dataDir,
@@ -129,6 +139,7 @@ export async function openStorage(
       db,
       initialization: new InitializationService(db),
       collectors,
+      projects,
       sessions,
       sessionSync,
       close: () => db.close(),

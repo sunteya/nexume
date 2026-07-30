@@ -30,6 +30,8 @@ export interface CachedSessionRecord extends CachedSessionPosition {
 
 export interface CachedSessionListOptions {
   collectorId?: string
+  projectId?: string
+  unassigned?: boolean
   agent?: AgentId
   title?: string
   status: SessionStatus
@@ -69,13 +71,15 @@ interface RegistryEntry {
 
 interface SessionCursorFilters {
   collectorId?: string
+  projectId?: string
+  unassigned?: boolean
   agent?: AgentId
   title?: string
   status: SessionStatus
 }
 
 interface SessionCursor {
-  version: 2
+  version: 3
   filters: SessionCursorFilters
   position: CachedSessionPosition
 }
@@ -101,6 +105,8 @@ function compareStrings(left: string, right: string): number {
 function filtersFor(params: ListSessionsParams): SessionCursorFilters {
   return {
     ...(params.collectorId ? { collectorId: params.collectorId } : {}),
+    ...(params.projectId ? { projectId: params.projectId } : {}),
+    ...(params.unassigned ? { unassigned: true } : {}),
     ...(params.agent ? { agent: params.agent } : {}),
     ...(params.title ? { title: params.title } : {}),
     status: params.status ?? "active",
@@ -113,6 +119,8 @@ function filtersEqual(
 ): boolean {
   return (
     left.collectorId === right.collectorId &&
+    left.projectId === right.projectId &&
+    left.unassigned === right.unassigned &&
     left.agent === right.agent &&
     left.title === right.title &&
     left.status === right.status
@@ -146,7 +154,7 @@ function decodeCursor(value: string): SessionCursor {
       Buffer.from(value, "base64url").toString("utf8"),
     ) as Partial<SessionCursor>
     if (
-      decoded.version !== 2 ||
+      decoded.version !== 3 ||
       !decoded.filters ||
       typeof decoded.filters !== "object" ||
       !sessionStatuses.includes(decoded.filters.status as SessionStatus)
@@ -158,6 +166,22 @@ function decodeCursor(value: string): SessionCursor {
       (typeof decoded.filters.collectorId !== "string" ||
         !decoded.filters.collectorId)
     ) {
+      throw new InvalidSessionCursorError()
+    }
+    if (
+      decoded.filters.projectId !== undefined &&
+      (typeof decoded.filters.projectId !== "string" ||
+        !decoded.filters.projectId)
+    ) {
+      throw new InvalidSessionCursorError()
+    }
+    if (
+      decoded.filters.unassigned !== undefined &&
+      decoded.filters.unassigned !== true
+    ) {
+      throw new InvalidSessionCursorError()
+    }
+    if (decoded.filters.projectId && decoded.filters.unassigned) {
       throw new InvalidSessionCursorError()
     }
     if (decoded.filters.agent !== undefined) {
@@ -283,7 +307,7 @@ export function createServerCore(
         hasMore: result.hasMore,
         nextCursor: result.nextCursor
           ? encodeCursor({
-              version: 2,
+              version: 3,
               filters,
               position: result.nextCursor,
             })

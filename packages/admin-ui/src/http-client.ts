@@ -1,15 +1,19 @@
 import type {
   CollectorClient,
   InitializationClient,
+  ProjectClient,
   SessionClient,
 } from "./client"
 import type {
+  AvailableSessionDirectory,
   CollectorTokenResult,
   CompleteInitializationInput,
   CreateCollectorInput,
   CreateCollectorResult,
   InitializationStatus,
   ManagedCollectorInfo,
+  CreateProjectInput,
+  ProjectInfo,
   RenameCollectorInput,
   RuntimeInfo,
   SessionBatch,
@@ -23,6 +27,14 @@ interface ApiErrorBody {
 
 interface CollectorListResult {
   items: ManagedCollectorInfo[]
+}
+
+interface ProjectListResult {
+  items: ProjectInfo[]
+}
+
+interface DirectoryListResult {
+  items: AvailableSessionDirectory[]
 }
 
 async function responseError(
@@ -76,6 +88,8 @@ export function createHttpSessionClient(
       if (params.collectorId) {
         url.searchParams.set("collectorId", params.collectorId)
       }
+      if (params.projectId) url.searchParams.set("projectId", params.projectId)
+      if (params.unassigned) url.searchParams.set("unassigned", "true")
       if (params.agent) url.searchParams.set("agent", params.agent)
       if (params.title) url.searchParams.set("title", params.title)
       if (params.status) url.searchParams.set("status", params.status)
@@ -94,6 +108,77 @@ export function createHttpSessionClient(
       }
 
       return (await response.json()) as SessionBatch
+    },
+  }
+}
+
+export function createHttpProjectClient(
+  accessToken: string,
+  onUnauthorized: () => void,
+): ProjectClient {
+  async function request(
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> {
+    const response = await fetch(input, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        ...init?.headers,
+      },
+    })
+    if (response.status === 401) {
+      onUnauthorized()
+      throw new Error("The access token is invalid.")
+    }
+    return response
+  }
+
+  return {
+    async list() {
+      const response = await request("/api/projects")
+      if (!response.ok)
+        throw await responseError(response, "Unable to load projects.")
+      return ((await response.json()) as ProjectListResult).items
+    },
+    async listDirectories() {
+      const response = await request("/api/session-directories")
+      if (!response.ok)
+        throw await responseError(response, "Unable to load directories.")
+      return ((await response.json()) as DirectoryListResult).items
+    },
+    async create(input: CreateProjectInput) {
+      const response = await request("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      })
+      if (!response.ok)
+        throw await responseError(response, "Unable to create the project.")
+      return (await response.json()) as ProjectInfo
+    },
+    async update(id: string, input: CreateProjectInput) {
+      const response = await request(
+        `/api/projects/${encodeURIComponent(id)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        },
+      )
+      if (!response.ok)
+        throw await responseError(response, "Unable to update the project.")
+      return (await response.json()) as ProjectInfo
+    },
+    async delete(id: string) {
+      const response = await request(
+        `/api/projects/${encodeURIComponent(id)}`,
+        {
+          method: "DELETE",
+        },
+      )
+      if (!response.ok)
+        throw await responseError(response, "Unable to delete the project.")
     },
   }
 }

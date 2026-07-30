@@ -6,6 +6,7 @@ import {
   assertCollectorSocketAuth,
   assertBeginSessionSyncRequest,
   assertListSessionsParams,
+  assertProjectInput,
   assertSessionSyncBatchRequest,
 } from "./index"
 
@@ -36,6 +37,58 @@ describe("Session query contracts", () => {
     expect(() =>
       assertListSessionsParams({ limit: 50, title: "x".repeat(257) }),
     ).toThrow("Session 标题搜索条件无效")
+  })
+
+  test("accepts either project scope and rejects conflicting scopes", () => {
+    expect(() =>
+      assertListSessionsParams({ limit: 50, projectId: "project-1" }),
+    ).not.toThrow()
+    expect(() =>
+      assertListSessionsParams({ limit: 50, unassigned: true }),
+    ).not.toThrow()
+    expect(() =>
+      assertListSessionsParams({
+        limit: 50,
+        projectId: "project-1",
+        unassigned: false,
+      }),
+    ).not.toThrow()
+    expect(() =>
+      assertListSessionsParams({
+        limit: 50,
+        projectId: "project-1",
+        unassigned: true,
+      }),
+    ).toThrow("Project 与未归类筛选条件不能同时使用")
+  })
+})
+
+describe("Project contracts", () => {
+  test("accepts a project with unique Collector directories", () => {
+    expect(() =>
+      assertProjectInput({
+        name: "Nexume",
+        directories: [
+          { collectorId: "local", directory: "/workspace/nexume" },
+          { collectorId: "remote", directory: "/srv/nexume" },
+        ],
+      }),
+    ).not.toThrow()
+  })
+
+  test("rejects invalid names and duplicate Collector directories", () => {
+    expect(() => assertProjectInput({ name: "   ", directories: [] })).toThrow(
+      "Project 名称必须是 1 到 128 个字符",
+    )
+    expect(() =>
+      assertProjectInput({
+        name: "Nexume",
+        directories: [
+          { collectorId: "local", directory: "/workspace/nexume" },
+          { collectorId: "local", directory: "/workspace/nexume" },
+        ],
+      }),
+    ).toThrow("Project 目录不能重复")
   })
 })
 

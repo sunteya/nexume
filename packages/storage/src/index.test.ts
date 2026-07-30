@@ -40,6 +40,7 @@ describe("Nexume storage", () => {
       { name: "0001_initial" },
       { name: "0002_collectors" },
       { name: "0003_sessions" },
+      { name: "0004_projects" },
     ])
     expect(
       first.db
@@ -57,7 +58,7 @@ describe("Nexume storage", () => {
           "SELECT count(*) AS count FROM system_migrations",
         )
         .get(),
-    ).toEqual({ count: 3 })
+    ).toEqual({ count: 4 })
     second.close()
   })
 

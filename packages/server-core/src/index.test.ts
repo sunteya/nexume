@@ -161,6 +161,36 @@ describe("createServerCore", () => {
     ])
   })
 
+  test("passes project scopes to the cache", async () => {
+    const calls: unknown[] = []
+    const core = createServerCore({
+      sessions: {
+        list(options) {
+          calls.push(options)
+          return { items: [], hasMore: false }
+        },
+      },
+    })
+
+    await core.listSessions({ limit: 50, projectId: "project-a" })
+    await core.listSessions({ limit: 50, unassigned: true })
+
+    expect(calls).toEqual([
+      {
+        projectId: "project-a",
+        status: "active",
+        limit: 50,
+        cursor: undefined,
+      },
+      {
+        unassigned: true,
+        status: "active",
+        limit: 50,
+        cursor: undefined,
+      },
+    ])
+  })
+
   test("rejects a pagination cursor after filters change", async () => {
     const records = Array.from({ length: 30 }, (_, index) =>
       record("collector-a", "opencode", 100 - index, index),
@@ -195,6 +225,44 @@ describe("createServerCore", () => {
         limit: 20,
         title: "draft",
         cursor: first.nextCursor,
+      }),
+    ).rejects.toBeInstanceOf(InvalidSessionCursorError)
+  })
+
+  test("rejects a pagination cursor after the project scope changes", async () => {
+    const records = Array.from({ length: 30 }, (_, index) =>
+      record("collector-a", "opencode", 100 - index, index),
+    )
+    const core = createServerCore({ sessions: catalog(records) })
+    const projectPage = await core.listSessions({
+      limit: 20,
+      projectId: "project-a",
+    })
+    const unassignedPage = await core.listSessions({
+      limit: 20,
+      unassigned: true,
+    })
+
+    expect(projectPage.nextCursor).toBeDefined()
+    expect(unassignedPage.nextCursor).toBeDefined()
+    await expect(
+      core.listSessions({
+        limit: 20,
+        projectId: "project-b",
+        cursor: projectPage.nextCursor,
+      }),
+    ).rejects.toBeInstanceOf(InvalidSessionCursorError)
+    await expect(
+      core.listSessions({
+        limit: 20,
+        unassigned: true,
+        cursor: projectPage.nextCursor,
+      }),
+    ).rejects.toBeInstanceOf(InvalidSessionCursorError)
+    await expect(
+      core.listSessions({
+        limit: 20,
+        cursor: unassignedPage.nextCursor,
       }),
     ).rejects.toBeInstanceOf(InvalidSessionCursorError)
   })

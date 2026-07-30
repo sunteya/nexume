@@ -1,4 +1,5 @@
 import type {
+  AvailableSessionDirectory,
   CollectorTokenResult,
   CompleteInitializationInput,
   CreateCollectorInput,
@@ -6,6 +7,8 @@ import type {
   InitializationStatus,
   ListSessionsParams,
   ManagedCollectorInfo,
+  CreateProjectInput,
+  ProjectInfo,
   RenameCollectorInput,
   RuntimeInfo,
   SessionBatch,
@@ -31,4 +34,12 @@ export interface CollectorClient {
   delete(id: string): Promise<void>
   sync(id: string): Promise<void>
   getToken(id: string): Promise<CollectorTokenResult>
+}
+
+export interface ProjectClient {
+  list(): Promise<ProjectInfo[]>
+  listDirectories(): Promise<AvailableSessionDirectory[]>
+  create(input: CreateProjectInput): Promise<ProjectInfo>
+  update(id: string, input: CreateProjectInput): Promise<ProjectInfo>
+  delete(id: string): Promise<void>
 }

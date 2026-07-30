@@ -5,11 +5,15 @@ import {
   assertCollectorName,
   assertCreateCollectorInput,
   assertListSessionsParams,
+  assertProjectInput,
+  type AvailableSessionDirectory,
   type CreateCollectorInput,
   type CreateCollectorResult,
+  type CreateProjectInput,
   type InitializationStatus,
   type ListSessionsParams,
   type ManagedCollectorInfo,
+  type ProjectInfo,
   type RuntimeInfo,
   type SessionBatchSize,
   type SessionStatus,
@@ -18,6 +22,7 @@ import { InvalidSessionCursorError, type ServerCore } from "@nexume/server-core"
 import { AlreadyInitializedError } from "@nexume/storage"
 
 import { CollectorManagementError } from "./collector-management"
+import { ProjectManagementError } from "./project-management"
 
 interface ErrorBody {
   error: {
@@ -40,6 +45,13 @@ export interface RequestHandlerOptions {
     delete(id: string): void
     revealToken(id: string): string
     sync(id: string): void
+  }
+  projects?: {
+    list(): ProjectInfo[]
+    create(input: CreateProjectInput): ProjectInfo
+    update(id: string, input: CreateProjectInput): ProjectInfo
+    delete(id: string): void
+    listDirectories(): AvailableSessionDirectory[]
   }
   getRuntimeInfo?: () => RuntimeInfo
   webRoot?: string
@@ -79,6 +91,8 @@ function parseSessionParams(url: URL): ListSessionsParams {
   const limitValue = url.searchParams.get("limit")
   const cursor = url.searchParams.get("cursor") ?? undefined
   const collectorId = url.searchParams.get("collectorId") ?? undefined
+  const projectId = url.searchParams.get("projectId") ?? undefined
+  const unassignedValue = url.searchParams.get("unassigned")
   const agent = url.searchParams.get("agent") ?? undefined
   const title = url.searchParams.get("title") ?? undefined
   const status = (url.searchParams.get("status") ?? undefined) as
@@ -87,6 +101,13 @@ function parseSessionParams(url: URL): ListSessionsParams {
     limit: (limitValue === null ? 50 : Number(limitValue)) as SessionBatchSize,
     cursor,
     collectorId,
+    projectId,
+    unassigned:
+      unassignedValue === null
+        ? undefined
+        : unassignedValue === "true"
+          ? true
+          : (unassignedValue as unknown as boolean),
     agent,
     title,
     status,
@@ -284,6 +305,74 @@ export function createRequestHandler(options: RequestHandlerOptions) {
             "internal_error",
             "The Server encountered an internal error.",
             500,
+          )
+        }
+      }
+
+      if (
+        request.method === "GET" &&
+        url.pathname === "/api/session-directories"
+      ) {
+        if (!options.projects) {
+          return errorResponse(
+            "not_found",
+            "The API endpoint does not exist.",
+            404,
+          )
+        }
+        return json({ items: options.projects.listDirectories() })
+      }
+
+      if (url.pathname === "/api/projects") {
+        if (!options.projects) {
+          return errorResponse(
+            "not_found",
+            "The API endpoint does not exist.",
+            404,
+          )
+        }
+        if (request.method === "GET") {
+          return json({ items: options.projects.list() })
+        }
+        if (request.method === "POST") {
+          try {
+            const body = await parseJsonBody(request)
+            assertProjectInput(body)
+            return json(options.projects.create(body), 201)
+          } catch (error) {
+            if (error instanceof ProjectManagementError) {
+              return errorResponse(error.code, error.message, error.status)
+            }
+            return errorResponse(
+              "invalid_request",
+              "The project data is invalid.",
+              400,
+            )
+          }
+        }
+      }
+
+      const projectMatch = url.pathname.match(/^\/api\/projects\/([^/]+)$/)
+      if (projectMatch && options.projects) {
+        const id = projectMatch[1]!
+        try {
+          if (request.method === "PATCH") {
+            const body = await parseJsonBody(request)
+            assertProjectInput(body)
+            return json(options.projects.update(id, body))
+          }
+          if (request.method === "DELETE") {
+            options.projects.delete(id)
+            return new Response(null, { status: 204 })
+          }
+        } catch (error) {
+          if (error instanceof ProjectManagementError) {
+            return errorResponse(error.code, error.message, error.status)
+          }
+          return errorResponse(
+            "invalid_request",
+            "The project update is invalid.",
+            400,
           )
         }
       }

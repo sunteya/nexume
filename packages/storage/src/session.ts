@@ -27,11 +27,21 @@ export interface SessionListCursor extends SessionKey {
 
 export interface ListSessionsOptions {
   collectorId?: string
+  projectId?: string
+  unassigned?: boolean
   agent?: AgentId
   title?: string
   status?: SessionStatus
   limit: number
   cursor?: SessionListCursor
+}
+
+export interface AvailableSessionDirectoryRecord {
+  collectorId: string
+  collectorName: string
+  directory: string
+  projectId: string | null
+  projectName: string | null
 }
 
 export interface SessionListResult {
@@ -53,6 +63,14 @@ interface SessionRow {
   first_seen_at: number
   last_synced_at: number
   last_reconcile_id: string | null
+}
+
+interface AvailableDirectoryRow {
+  collector_id: string
+  collector_name: string
+  directory: string
+  project_id: string | null
+  project_name: string | null
 }
 
 function fromRow(row: SessionRow): SessionRecord {
@@ -94,6 +112,33 @@ export class SessionStore {
     return row ? fromRow(row) : undefined
   }
 
+  listAvailableDirectories(): AvailableSessionDirectoryRecord[] {
+    return this.db
+      .query<AvailableDirectoryRow, []>(
+        `SELECT DISTINCT
+           sessions.collector_id,
+           collectors.name AS collector_name,
+           sessions.directory,
+           project_directories.project_id,
+           projects.name AS project_name
+         FROM sessions
+         JOIN collectors ON collectors.id = sessions.collector_id
+         LEFT JOIN project_directories
+           ON project_directories.collector_id = sessions.collector_id
+          AND project_directories.directory = sessions.directory
+         LEFT JOIN projects ON projects.id = project_directories.project_id
+         ORDER BY collectors.name COLLATE NOCASE ASC, sessions.directory ASC`,
+      )
+      .all()
+      .map((row) => ({
+        collectorId: row.collector_id,
+        collectorName: row.collector_name,
+        directory: row.directory,
+        projectId: row.project_id,
+        projectName: row.project_name,
+      }))
+  }
+
   list(options: ListSessionsOptions): SessionListResult {
     if (!Number.isSafeInteger(options.limit) || options.limit <= 0) {
       throw new Error("Session list limit must be a positive safe integer.")
@@ -104,6 +149,21 @@ export class SessionStore {
     if (options.collectorId !== undefined) {
       conditions.push("collector_id = ?")
       bindings.push(options.collectorId)
+    }
+    if (options.projectId !== undefined) {
+      conditions.push(`EXISTS (
+        SELECT 1 FROM project_directories
+        WHERE project_directories.project_id = ?
+          AND project_directories.collector_id = sessions.collector_id
+          AND project_directories.directory = sessions.directory
+      )`)
+      bindings.push(options.projectId)
+    } else if (options.unassigned) {
+      conditions.push(`NOT EXISTS (
+        SELECT 1 FROM project_directories
+        WHERE project_directories.collector_id = sessions.collector_id
+          AND project_directories.directory = sessions.directory
+      )`)
     }
     if (options.agent !== undefined) {
       conditions.push("agent = ?")

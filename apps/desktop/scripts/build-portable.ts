@@ -22,7 +22,7 @@ function markAsWindowsGuiExecutable(path: string): void {
 
   // Bun 1.3.13 writes Windows metadata but leaves the PE subsystem as console.
   bytes.writeUInt16LE(2, optionalHeaderOffset + 68)
-  writeFileSync(path, bytes)
+  writeFileSync(path, new Uint8Array(bytes))
 }
 
 if (process.platform !== "win32") {

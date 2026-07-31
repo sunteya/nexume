@@ -8,9 +8,13 @@ Nexume 是一个 AI Agent 数据与上下文中枢。它汇总 Claude Code、Cod
 
 Nexume 计划支持 Windows、macOS 和 Linux，并覆盖桌面端、服务器、Docker 和 CLI 等使用场景。
 
-## 下载
+## 运行方式
 
-桌面端构建可从 [GitHub Releases](https://github.com/sunteya/nexume/releases/latest) 下载：
+Nexume 支持两种运行方式。
+
+### 方法 1：Desktop App（独立运行）
+
+从 [GitHub Releases](https://github.com/sunteya/nexume/releases/latest) 下载 Desktop App：
 
 - macOS Apple 芯片（ARM64）：DMG 镜像。当前构建未签名且未公证，首次启动时可能需要在“隐私与安全性”中允许打开。
 - Windows x64：包含 `Nexume.exe` 的绿色 ZIP，无需安装；首次启动时会将运行组件缓存到 `%LOCALAPPDATA%/Nexume`。
@@ -22,6 +26,23 @@ sudo xattr -dr com.apple.quarantine /Applications/Nexume.app
 ```
 
 之后即可从“应用程序”正常启动 Nexume。
+
+### 方法 2：Docker + Collector（开发中）
+
+创建 `compose.yml`：
+
+```yaml
+services:
+  server:
+    image: sunteya/nexume:0.1.0
+    restart: unless-stopped
+    environment:
+      NEXUME_ACCESS_TOKEN: your-access-token
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/data
+```
 
 ## 支持的 Agents
 

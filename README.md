@@ -8,9 +8,13 @@ The first phase focuses on unified session management, including local and remot
 
 Nexume is planned to support desktop, server, Docker, and CLI use cases on Windows, macOS, and Linux.
 
-## Download
+## Running
 
-Desktop builds are available from [GitHub Releases](https://github.com/sunteya/nexume/releases/latest):
+Nexume supports two deployment modes.
+
+### Method 1: Desktop App (Standalone)
+
+Download the Desktop App from [GitHub Releases](https://github.com/sunteya/nexume/releases/latest):
 
 - macOS Apple silicon (ARM64): DMG image. The current build is not signed or notarized, so macOS may require approval in Privacy & Security before first launch.
 - Windows x64: portable ZIP containing `Nexume.exe`. No installer is required; runtime files are cached under `%LOCALAPPDATA%/Nexume` on first launch.
@@ -22,6 +26,23 @@ sudo xattr -dr com.apple.quarantine /Applications/Nexume.app
 ```
 
 You can then launch Nexume normally from Applications.
+
+### Method 2: Docker + Collector (Under Development)
+
+Create `compose.yml`:
+
+```yaml
+services:
+  server:
+    image: sunteya/nexume:0.1.0
+    restart: unless-stopped
+    environment:
+      NEXUME_ACCESS_TOKEN: your-access-token
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/data
+```
 
 ## Supported Agents
 

@@ -6,3 +6,4 @@ apps/*/node_modules/
 apps/*/dist/
 apps/*/build/
 apps/*/artifacts/
+docker/data/

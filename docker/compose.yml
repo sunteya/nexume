@@ -1,0 +1,10 @@
+services:
+  server:
+    image: sunteya/nexume:0.1.0
+    restart: unless-stopped
+    environment:
+      NEXUME_ACCESS_TOKEN: your-access-token
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/data

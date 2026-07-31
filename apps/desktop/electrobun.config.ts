@@ -4,7 +4,7 @@ export default {
   app: {
     name: "Nexume",
     identifier: "dev.nexume.desktop",
-    version: "0.0.1",
+    version: "0.1.0",
   },
   build: {
     copy: {

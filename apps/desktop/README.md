@@ -13,7 +13,7 @@
 ## 环境要求
 
 - Bun 1.3.13 或更高版本。
-- macOS 构建需要 macOS runner。
+- macOS ARM64 构建需要 Apple silicon runner。
 - Windows portable EXE 构建需要 Windows x64 runner。
 
 ## 开发
@@ -53,6 +53,14 @@ Electrobun 官方生成的 `Setup.exe` 和 `.installer` 目录只作为 portable
 
 `Nexume.exe` 首次运行时会将 Electrobun 运行组件静默释放到 `%LOCALAPPDATA%/Nexume/runtime/<version-hash>`，然后直接启动应用。该过程没有安装界面，不创建桌面或开始菜单快捷方式，也不写入注册表。后续启动会复用经过哈希校验的缓存。
 
-GitHub Actions 工作流 `.github/workflows/desktop-build.yml` 会分别构建 macOS DMG 和 Windows `Nexume.exe`，并上传为独立 Artifact。
+GitHub Actions 工作流 `.github/workflows/desktop-build.yml` 会分别构建 macOS ARM64 DMG 和 Windows x64 portable ZIP，并上传为独立 Artifact。推送与应用版本一致的 `v*` Tag 时，工作流会自动创建 GitHub Release 并上传两个平台的发布文件。
+
+当前 macOS 构建未签名且未公证，首次启动时可能需要在系统“隐私与安全性”中允许打开。
+
+下载 DMG 后，将 `Nexume.app` 拖入“应用程序”，然后执行以下命令移除下载隔离属性：
+
+```bash
+sudo xattr -dr com.apple.quarantine /Applications/Nexume.app
+```
 
 项目通过 `scripts/electrobun.ts` 启动 Electrobun CLI。该脚本会处理 Electrobun 1.18.1 在 macOS 26+ 上的 CLI ad-hoc 签名问题，并正确传播 CLI 退出码。

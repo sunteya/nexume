@@ -8,6 +8,21 @@ The first phase focuses on unified session management, including local and remot
 
 Nexume is planned to support desktop, server, Docker, and CLI use cases on Windows, macOS, and Linux.
 
+## Download
+
+Desktop builds are available from [GitHub Releases](https://github.com/sunteya/nexume/releases/latest):
+
+- macOS Apple silicon (ARM64): DMG image. The current build is not signed or notarized, so macOS may require approval in Privacy & Security before first launch.
+- Windows x64: portable ZIP containing `Nexume.exe`. No installer is required; runtime files are cached under `%LOCALAPPDATA%/Nexume` on first launch.
+
+To open the current unsigned macOS build, drag `Nexume.app` into Applications, then run:
+
+```bash
+sudo xattr -dr com.apple.quarantine /Applications/Nexume.app
+```
+
+You can then launch Nexume normally from Applications.
+
 ## Supported Agents
 
 - Codex, including Codex history in the renamed ChatGPT desktop app

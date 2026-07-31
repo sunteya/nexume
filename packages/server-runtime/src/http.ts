@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto"
 import { resolve, sep } from "node:path"
 
 import {
+  assertAgentId,
   assertCollectorName,
   assertAiSettingsInput,
   assertCreateCollectorInput,
@@ -22,6 +23,8 @@ import {
   type ListSessionsParams,
   type ManagedCollectorInfo,
   type ProjectInfo,
+  type ProjectList,
+  type ProjectSessionFilters,
   type RuntimeInfo,
   type SessionBatchSize,
   type SessionDetailPage,
@@ -63,7 +66,7 @@ export interface RequestHandlerOptions {
     sync(id: string): void
   }
   projects?: {
-    list(): ProjectInfo[]
+    list(filters?: ProjectSessionFilters): ProjectList
     create(input: CreateProjectInput): ProjectInfo
     update(id: string, input: CreateProjectInput): ProjectInfo
     delete(id: string): void
@@ -629,7 +632,34 @@ export function createRequestHandler(options: RequestHandlerOptions) {
           )
         }
         if (request.method === "GET") {
-          return json({ items: options.projects.list() })
+          const title = url.searchParams.get("title")?.trim() || undefined
+          const collectorId =
+            url.searchParams.get("collectorId")?.trim() || undefined
+          const agent = url.searchParams.get("agent")?.trim() || undefined
+          if (title && title.length > 256) {
+            return errorResponse(
+              "invalid_request",
+              "The Session title search condition is invalid.",
+              400,
+            )
+          }
+          if (collectorId && collectorId.length > 512) {
+            return errorResponse(
+              "invalid_request",
+              "The Collector filter is invalid.",
+              400,
+            )
+          }
+          try {
+            if (agent) assertAgentId(agent)
+          } catch {
+            return errorResponse(
+              "invalid_request",
+              "The Agent filter is invalid.",
+              400,
+            )
+          }
+          return json(options.projects.list({ title, collectorId, agent }))
         }
         if (request.method === "POST") {
           try {

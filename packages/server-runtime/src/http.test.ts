@@ -422,11 +422,13 @@ describe("Server HTTP API", () => {
   })
 
   test("lists Projects and available Session directories", async () => {
+    let receivedFilters: unknown
     const project = {
       id: "project-1",
       name: "Nexume",
       groupName: "Work",
       directories: [{ collectorId: "local", directory: "/workspace/nexume" }],
+      sessionCount: 1,
       createdAt: 100,
       updatedAt: 100,
     }
@@ -441,7 +443,10 @@ describe("Server HTTP API", () => {
       accessToken: token,
       core: createCore(),
       projects: {
-        list: () => [project],
+        list: (filters) => {
+          receivedFilters = filters
+          return { items: [project], unassignedSessionCount: 2 }
+        },
         create: () => project,
         update: () => project,
         delete: () => {},
@@ -450,10 +455,28 @@ describe("Server HTTP API", () => {
     })
 
     const projects = await handler(
-      new Request("http://localhost/api/projects", { headers: authorization }),
+      new Request(
+        "http://localhost/api/projects?title=nexume&collectorId=local&agent=opencode",
+        { headers: authorization },
+      ),
     )
     expect(projects.status).toBe(200)
-    expect(await projects.json()).toEqual({ items: [project] })
+    expect(await projects.json()).toEqual({
+      items: [project],
+      unassignedSessionCount: 2,
+    })
+    expect(receivedFilters).toEqual({
+      title: "nexume",
+      collectorId: "local",
+      agent: "opencode",
+    })
+
+    const invalidSearch = await handler(
+      new Request(`http://localhost/api/projects?title=${"a".repeat(257)}`, {
+        headers: authorization,
+      }),
+    )
+    expect(invalidSearch.status).toBe(400)
 
     const directories = await handler(
       new Request("http://localhost/api/session-directories", {
@@ -471,6 +494,7 @@ describe("Server HTTP API", () => {
       name: "Nexume",
       groupName: "Work",
       directories: [{ collectorId: "local", directory: "/workspace/nexume" }],
+      sessionCount: 1,
       createdAt: 100,
       updatedAt: 100,
     }
@@ -478,7 +502,7 @@ describe("Server HTTP API", () => {
       accessToken: token,
       core: createCore(),
       projects: {
-        list: () => [],
+        list: () => ({ items: [], unassignedSessionCount: 0 }),
         create: (input) => {
           calls.push(
             `create:${input.name}:${input.groupName}:${input.directories[0]?.directory}`,

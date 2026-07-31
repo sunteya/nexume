@@ -81,6 +81,22 @@ interface AvailableDirectoryRow {
   project_name: string | null
 }
 
+interface ProjectSessionCountRow {
+  project_id: string | null
+  count: number
+}
+
+export interface ActiveSessionScopeCounts {
+  projects: Map<string, number>
+  unassigned: number
+}
+
+export interface ActiveSessionCountFilters {
+  title?: string
+  collectorId?: string
+  agent?: AgentId
+}
+
 function fromRow(row: SessionRow): SessionRecord {
   return {
     collectorId: row.collector_id,
@@ -178,6 +194,46 @@ export class SessionStore {
         projectId: row.project_id,
         projectName: row.project_name,
       }))
+  }
+
+  countActiveByScope(
+    filters: ActiveSessionCountFilters = {},
+  ): ActiveSessionScopeCounts {
+    const conditions = [
+      "sessions.source_archived_at IS NULL",
+      "sessions.deleted_at IS NULL",
+    ]
+    const bindings: SQLQueryBindings[] = []
+    if (filters.title) {
+      conditions.push("instr(lower(sessions.title), lower(?)) > 0")
+      bindings.push(filters.title)
+    }
+    if (filters.collectorId) {
+      conditions.push("sessions.collector_id = ?")
+      bindings.push(filters.collectorId)
+    }
+    if (filters.agent) {
+      conditions.push("sessions.agent = ?")
+      bindings.push(filters.agent)
+    }
+    const rows = this.db
+      .query<ProjectSessionCountRow, SQLQueryBindings[]>(
+        `SELECT project_directories.project_id, COUNT(*) AS count
+         FROM sessions
+         LEFT JOIN project_directories
+           ON project_directories.collector_id = sessions.collector_id
+          AND project_directories.directory = sessions.directory
+         WHERE ${conditions.join(" AND ")}
+         GROUP BY project_directories.project_id`,
+      )
+      .all(...bindings)
+    const projects = new Map<string, number>()
+    let unassigned = 0
+    for (const row of rows) {
+      if (row.project_id === null) unassigned = row.count
+      else projects.set(row.project_id, row.count)
+    }
+    return { projects, unassigned }
   }
 
   list(options: ListSessionsOptions): SessionListResult {

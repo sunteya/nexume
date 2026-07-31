@@ -5,10 +5,19 @@ import {
   type ProjectClient,
   type SessionClient,
 } from "./client"
-import { ElButton, ElConfigProvider, ElInput } from "element-plus"
+import {
+  ElButton,
+  ElConfigProvider,
+  ElInput,
+  ElMessage,
+  ElOption,
+  ElSelect,
+} from "element-plus"
 import en from "element-plus/es/locale/lang/en"
-import { KeyRound } from "lucide-vue-next"
-import { ref, shallowRef } from "vue"
+import { KeyRound, Search } from "lucide-vue-next"
+import { computed, onBeforeUnmount, ref, shallowRef, watch } from "vue"
+
+import type { ManagedCollectorInfo } from "@nexume/contracts"
 
 import {
   createHttpCollectorClient,
@@ -38,12 +47,40 @@ const collectorClient = shallowRef<CollectorClient>()
 const projectClient = shallowRef<ProjectClient>()
 const aiSettingsClient = shallowRef<AiSettingsClient>()
 const activeView = ref<AppView>("sessions")
+const collectors = ref<ManagedCollectorInfo[]>([])
+const collectorsLoading = ref(false)
 const selectedCollectorId = ref("")
+const selectedAgent = ref("")
 const selectedProjectId = ref<string>()
 const selectedProjectName = ref("Unassigned")
 const projectRevision = ref(0)
+const sessionRevision = ref(0)
+const sessionSearchInput = ref("")
+const sessionTitleQuery = ref("")
 const initializationReady = ref(false)
 const bootstrapReady = ref(false)
+let sessionSearchTimer: ReturnType<typeof setTimeout> | undefined
+let collectorRequest = 0
+
+const agentOptions = computed(() => {
+  const availableCollectors = selectedCollectorId.value
+    ? collectors.value.filter(
+        (collector) => collector.id === selectedCollectorId.value,
+      )
+    : collectors.value
+  return [
+    ...new Set(availableCollectors.flatMap((collector) => collector.agents)),
+  ].sort((left, right) => left.localeCompare(right, "en"))
+})
+
+function resetSessionFilters(): void {
+  if (sessionSearchTimer !== undefined) clearTimeout(sessionSearchTimer)
+  sessionSearchTimer = undefined
+  sessionSearchInput.value = ""
+  sessionTitleQuery.value = ""
+  selectedCollectorId.value = ""
+  selectedAgent.value = ""
+}
 
 function clearAccessToken(): void {
   sessionStorage.removeItem(storageKey)
@@ -54,10 +91,69 @@ function clearAccessToken(): void {
   aiSettingsClient.value = undefined
   authError.value =
     "The access token is invalid. Enter a valid token to continue."
-  selectedCollectorId.value = ""
+  resetSessionFilters()
 }
 
 const initializationClient = createHttpInitializationClient(clearAccessToken)
+
+function applySessionSearch(): void {
+  if (sessionSearchTimer !== undefined) clearTimeout(sessionSearchTimer)
+  sessionSearchTimer = undefined
+  sessionTitleQuery.value = sessionSearchInput.value.trim()
+}
+
+function handleSessionSearchInput(): void {
+  if (sessionSearchTimer !== undefined) clearTimeout(sessionSearchTimer)
+  sessionSearchTimer = setTimeout(applySessionSearch, 300)
+}
+
+function normalizeSessionFilters(): void {
+  if (
+    selectedCollectorId.value &&
+    !collectors.value.some(
+      (collector) => collector.id === selectedCollectorId.value,
+    )
+  ) {
+    selectedCollectorId.value = ""
+  }
+  if (selectedAgent.value && !agentOptions.value.includes(selectedAgent.value)) {
+    selectedAgent.value = ""
+  }
+}
+
+async function loadSessionFilterOptions(): Promise<void> {
+  const current = collectorClient.value
+  if (!current || !initializationReady.value) return
+  const requestId = ++collectorRequest
+  collectorsLoading.value = true
+  try {
+    const items = await current.list()
+    if (
+      requestId !== collectorRequest ||
+      current !== collectorClient.value
+    ) {
+      return
+    }
+    collectors.value = items
+    normalizeSessionFilters()
+  } catch (error) {
+    if (requestId !== collectorRequest) return
+    ElMessage.error(
+      error instanceof Error ? error.message : "Unable to load collectors.",
+    )
+  } finally {
+    if (requestId === collectorRequest) collectorsLoading.value = false
+  }
+}
+
+function handleCollectorFilterChange(): void {
+  selectedAgent.value = ""
+}
+
+function handleSessionsRefreshed(): void {
+  sessionRevision.value += 1
+  void loadSessionFilterOptions()
+}
 
 function disconnect(): void {
   sessionStorage.removeItem(storageKey)
@@ -68,7 +164,7 @@ function disconnect(): void {
   aiSettingsClient.value = undefined
   authError.value = ""
   activeView.value = "sessions"
-  selectedCollectorId.value = ""
+  resetSessionFilters()
 }
 
 function createClient(token: string): SessionClient {
@@ -135,6 +231,7 @@ function selectProject(
 
 function viewCollectorSessions(collectorId: string): void {
   selectedCollectorId.value = collectorId
+  selectedAgent.value = ""
   activeView.value = "sessions"
 }
 
@@ -161,6 +258,25 @@ function bootstrap(): void {
 }
 
 bootstrap()
+
+watch(
+  [collectorClient, initializationReady],
+  ([current, ready], _previous, onCleanup) => {
+    if (!current || !ready) return
+    void loadSessionFilterOptions()
+    const unsubscribe = current.subscribe((items) => {
+      if (current !== collectorClient.value) return
+      collectors.value = items
+      normalizeSessionFilters()
+    })
+    onCleanup(unsubscribe)
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(() => {
+  if (sessionSearchTimer !== undefined) clearTimeout(sessionSearchTimer)
+})
 </script>
 
 <template>
@@ -191,11 +307,70 @@ bootstrap()
         @disconnect="disconnect"
       />
 
+      <section
+        v-if="activeView === 'sessions'"
+        class="global-session-filters"
+        aria-label="Global session filters"
+      >
+        <el-input
+          v-model="sessionSearchInput"
+          class="global-session-search"
+          :prefix-icon="Search"
+          placeholder="Search session titles"
+          maxlength="256"
+          clearable
+          aria-label="Filter all sessions by title"
+          @input="handleSessionSearchInput"
+          @clear="applySessionSearch"
+          @keyup.enter="applySessionSearch"
+        />
+        <label class="global-session-filter-field">
+          <span>Collector</span>
+          <el-select
+            v-model="selectedCollectorId"
+            class="global-session-select"
+            :loading="collectorsLoading"
+            placeholder="All collectors"
+            aria-label="Filter all sessions by collector"
+            @change="handleCollectorFilterChange"
+          >
+            <el-option label="All collectors" value="" />
+            <el-option
+              v-for="collector in collectors"
+              :key="collector.id"
+              :label="collector.name"
+              :value="collector.id"
+            />
+          </el-select>
+        </label>
+        <label class="global-session-filter-field">
+          <span>Agent</span>
+          <el-select
+            v-model="selectedAgent"
+            class="global-session-select"
+            placeholder="All agents"
+            aria-label="Filter all sessions by agent"
+          >
+            <el-option label="All agents" value="" />
+            <el-option
+              v-for="agent in agentOptions"
+              :key="agent"
+              :label="agent"
+              :value="agent"
+            />
+          </el-select>
+        </label>
+      </section>
+
       <div class="app-workspace">
         <project-sidebar
           v-if="activeView !== 'settings'"
           :client="projectClient"
           :active-project-id="selectedProjectId"
+          :session-revision="sessionRevision"
+          :title-query="activeView === 'sessions' ? sessionTitleQuery : ''"
+          :collector-id="activeView === 'sessions' ? selectedCollectorId : ''"
+          :agent="activeView === 'sessions' ? selectedAgent : ''"
           @change="projectRevision++"
           @select="selectProject"
         />
@@ -203,12 +378,13 @@ bootstrap()
           <session-app
             v-if="activeView === 'sessions'"
             :client="client"
-            :collector-client="collectorClient"
-            :initial-collector-id="selectedCollectorId"
+            :collector-id="selectedCollectorId"
+            :agent="selectedAgent"
             :project-id="selectedProjectId"
             :project-name="selectedProjectName"
             :project-revision="projectRevision"
-            @collector-change="selectedCollectorId = $event"
+            :title-query="sessionTitleQuery"
+            @sessions-refreshed="handleSessionsRefreshed"
           />
           <collector-app
             v-else-if="activeView === 'collectors'"

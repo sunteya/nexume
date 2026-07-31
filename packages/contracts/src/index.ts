@@ -132,8 +132,20 @@ export interface ProjectInfo {
   name: string
   groupName?: string
   directories: ProjectDirectory[]
+  sessionCount: number
   createdAt: number
   updatedAt: number
+}
+
+export interface ProjectSessionFilters {
+  title?: string
+  collectorId?: string
+  agent?: AgentId
+}
+
+export interface ProjectList {
+  items: ProjectInfo[]
+  unassignedSessionCount: number
 }
 
 export interface CreateProjectInput {

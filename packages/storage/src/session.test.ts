@@ -358,6 +358,10 @@ describe("session storage", () => {
       runId: "project-a-sessions",
       items: [
         item("assigned", 30, { directory: "/work/project" }),
+        item("archived", 25, {
+          directory: "/work/project",
+          sourceArchivedAt: 26,
+        }),
         item("child", 20, { directory: "/work/project/subdirectory" }),
       ],
     })
@@ -377,6 +381,30 @@ describe("session storage", () => {
         .list({ unassigned: true, limit: 10 })
         .items.map((row) => row.sourceId),
     ).toEqual(["child", "other-collector"])
+    expect(storage.sessions.countActiveByScope()).toEqual({
+      projects: new Map([["project-a", 1]]),
+      unassigned: 2,
+    })
+    expect(storage.sessions.countActiveByScope({ title: "ASSIGNED" })).toEqual({
+      projects: new Map([["project-a", 1]]),
+      unassigned: 0,
+    })
+    expect(
+      storage.sessions.countActiveByScope({
+        title: "child",
+        collectorId: "collector-a",
+        agent: "opencode",
+      }),
+    ).toEqual({
+      projects: new Map(),
+      unassigned: 1,
+    })
+    expect(
+      storage.sessions.countActiveByScope({ collectorId: "collector-b" }),
+    ).toEqual({
+      projects: new Map(),
+      unassigned: 1,
+    })
     storage.close()
   })
 

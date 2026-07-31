@@ -14,6 +14,8 @@ import type {
   ManagedCollectorInfo,
   CreateProjectInput,
   ProjectInfo,
+  ProjectList,
+  ProjectSessionFilters,
   RenameCollectorInput,
   RuntimeInfo,
   SessionBatch,
@@ -61,7 +63,7 @@ export interface CollectorClient {
 }
 
 export interface ProjectClient {
-  list(): Promise<ProjectInfo[]>
+  list(filters?: ProjectSessionFilters): Promise<ProjectList>
   listDirectories(): Promise<AvailableSessionDirectory[]>
   create(input: CreateProjectInput): Promise<ProjectInfo>
   update(id: string, input: CreateProjectInput): Promise<ProjectInfo>

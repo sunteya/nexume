@@ -22,6 +22,8 @@ import type {
   ManagedCollectorInfo,
   CreateProjectInput,
   ProjectInfo,
+  ProjectList,
+  ProjectSessionFilters,
   RenameCollectorInput,
   RuntimeInfo,
   SessionBatch,
@@ -42,10 +44,6 @@ interface ApiErrorBody {
 
 interface CollectorListResult {
   items: ManagedCollectorInfo[]
-}
-
-interface ProjectListResult {
-  items: ProjectInfo[]
 }
 
 interface DirectoryListResult {
@@ -319,11 +317,17 @@ export function createHttpProjectClient(
   }
 
   return {
-    async list() {
-      const response = await request("/api/projects")
+    async list(filters: ProjectSessionFilters = {}) {
+      const url = new URL("/api/projects", window.location.origin)
+      if (filters.title) url.searchParams.set("title", filters.title)
+      if (filters.collectorId) {
+        url.searchParams.set("collectorId", filters.collectorId)
+      }
+      if (filters.agent) url.searchParams.set("agent", filters.agent)
+      const response = await request(url)
       if (!response.ok)
         throw await responseError(response, "Unable to load projects.")
-      return ((await response.json()) as ProjectListResult).items
+      return (await response.json()) as ProjectList
     },
     async listDirectories() {
       const response = await request("/api/session-directories")

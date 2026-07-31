@@ -6,8 +6,6 @@ import {
   ElEmpty,
   ElInput,
   ElMessage,
-  ElOption,
-  ElSelect,
   ElTable,
   ElTableColumn,
   ElTag,
@@ -23,7 +21,6 @@ import {
   LoaderCircle,
   Pencil,
   RefreshCw,
-  Search,
   Sparkles,
   Terminal,
   Wrench,
@@ -32,7 +29,6 @@ import {
   computed,
   nextTick,
   onActivated,
-  onBeforeUnmount,
   onMounted,
   ref,
   watch,
@@ -40,29 +36,29 @@ import {
 
 import type {
   CollectorQueryWarning,
-  ManagedCollectorInfo,
   SessionDetailMessage,
   SessionDetailPart,
   SessionSummary,
 } from "@nexume/contracts"
 
-import type { CollectorClient, SessionClient } from "./client"
+import type { SessionClient } from "./client"
 import PageToolbar from "./PageToolbar.vue"
 
 const props = withDefaults(
   defineProps<{
     client: SessionClient
-    collectorClient: CollectorClient
-    initialCollectorId?: string
+    collectorId?: string
+    agent?: string
     projectId?: string
     projectName?: string
     projectRevision?: number
+    titleQuery?: string
   }>(),
   {},
 )
 
 const emit = defineEmits<{
-  "collector-change": [collectorId: string]
+  "sessions-refreshed": []
 }>()
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
@@ -82,7 +78,6 @@ const logTimeFormatter = new Intl.DateTimeFormat("en-US", {
   second: "2-digit",
   hourCycle: "h23",
 })
-const searchDebounceMs = 300
 const loadMoreThreshold = 120
 
 type TitleSuggestionLogState = "active" | "complete" | "error"
@@ -95,18 +90,11 @@ interface TitleSuggestionLog {
 }
 
 const sessions = ref<SessionSummary[]>([])
-const collectors = ref<ManagedCollectorInfo[]>([])
-const selectedCollectorId = ref(props.initialCollectorId ?? "")
-const selectedAgent = ref("")
-const titleQuery = ref("")
-const appliedTitleQuery = ref("")
 const nextCursor = ref<string>()
 const hasMore = ref(false)
 const warnings = ref<CollectorQueryWarning[]>([])
 const loading = ref(false)
-const collectorsLoading = ref(false)
 const errorMessage = ref("")
-const collectorsErrorMessage = ref("")
 const editingSessionKey = ref("")
 const editingTitle = ref("")
 const titleDialogVisible = ref(false)
@@ -129,7 +117,6 @@ let latestTitleSuggestionRequest = 0
 let nextTitleSuggestionLogId = 0
 let mounted = false
 let initialActivation = true
-let searchTimer: ReturnType<typeof setTimeout> | undefined
 
 const resultSummary = computed(() =>
   sessions.value.length === 0
@@ -141,18 +128,6 @@ const warningMessage = computed(() =>
     .map((warning) => `${warning.collectorName}: ${warning.message}`)
     .join("; "),
 )
-const agentOptions = computed(() => {
-  const availableCollectors = selectedCollectorId.value
-    ? collectors.value.filter(
-        (collector) => collector.id === selectedCollectorId.value,
-      )
-    : collectors.value
-
-  return [
-    ...new Set(availableCollectors.flatMap((collector) => collector.agents)),
-  ].sort((left, right) => left.localeCompare(right, "en"))
-})
-
 function getRowKey(session: SessionSummary): string {
   return `${session.collectorId}:${session.agent}:${session.id}`
 }
@@ -475,11 +450,11 @@ async function loadSessions(append = false): Promise<void> {
     const result = await props.client.listSessions({
       limit: 50,
       cursor: append ? nextCursor.value : undefined,
-      collectorId: selectedCollectorId.value || undefined,
+      collectorId: props.collectorId || undefined,
       projectId: props.projectId,
       unassigned: !props.projectId,
-      agent: selectedAgent.value || undefined,
-      title: appliedTitleQuery.value || undefined,
+      agent: props.agent || undefined,
+      title: props.titleQuery || undefined,
     })
 
     if (requestId !== latestRequest) return
@@ -516,41 +491,11 @@ async function loadSessions(append = false): Promise<void> {
   }
 }
 
-async function loadCollectors(): Promise<void> {
-  if (collectorsLoading.value) return
-
-  collectorsLoading.value = true
-  collectorsErrorMessage.value = ""
-  try {
-    collectors.value = await props.collectorClient.list()
-  } catch (error) {
-    collectorsErrorMessage.value =
-      error instanceof Error ? error.message : "Unable to load collectors."
-  } finally {
-    collectorsLoading.value = false
-  }
-}
-
 function resetAndLoadSessions(): void {
   closeSessionDetail()
   nextCursor.value = undefined
   hasMore.value = false
   void loadSessions(false)
-}
-
-function applyTitleSearch(): void {
-  if (searchTimer !== undefined) clearTimeout(searchTimer)
-  searchTimer = undefined
-  const nextTitle = titleQuery.value.trim()
-  if (nextTitle === appliedTitleQuery.value) return
-
-  appliedTitleQuery.value = nextTitle
-  resetAndLoadSessions()
-}
-
-function handleTitleInput(): void {
-  if (searchTimer !== undefined) clearTimeout(searchTimer)
-  searchTimer = setTimeout(applyTitleSearch, searchDebounceMs)
 }
 
 function handleTableScroll({ scrollTop }: { scrollTop: number }): void {
@@ -566,28 +511,14 @@ function handleTableScroll({ scrollTop }: { scrollTop: number }): void {
   }
 }
 
-function handleCollectorChange(): void {
-  selectedAgent.value = ""
-  emit("collector-change", selectedCollectorId.value)
-  resetAndLoadSessions()
-}
-
-function handleAgentChange(): void {
-  resetAndLoadSessions()
-}
-
 async function refresh(): Promise<void> {
-  await Promise.all([loadCollectors(), loadSessions(false)])
+  await loadSessions(false)
+  emit("sessions-refreshed")
 }
 
 watch(
-  () => props.initialCollectorId,
-  (collectorId) => {
-    const nextCollectorId = collectorId ?? ""
-    if (nextCollectorId === selectedCollectorId.value) return
-
-    selectedCollectorId.value = nextCollectorId
-    selectedAgent.value = ""
+  () => [props.collectorId, props.agent] as const,
+  () => {
     if (mounted) resetAndLoadSessions()
   },
 )
@@ -606,13 +537,16 @@ watch(
   },
 )
 
+watch(
+  () => props.titleQuery,
+  () => {
+    if (mounted) resetAndLoadSessions()
+  },
+)
+
 onMounted(() => {
   mounted = true
   void refresh()
-})
-
-onBeforeUnmount(() => {
-  if (searchTimer !== undefined) clearTimeout(searchTimer)
 })
 
 onActivated(() => {
@@ -859,63 +793,6 @@ onActivated(() => {
       </template>
     </page-toolbar>
 
-    <section class="session-filter-toolbar" aria-label="Session filters">
-      <label class="session-filter-field session-search-field">
-        <span>Title</span>
-        <el-input
-          v-model="titleQuery"
-          class="session-filter-input"
-          :prefix-icon="Search"
-          placeholder="Search titles"
-          maxlength="256"
-          clearable
-          aria-label="Search sessions by title"
-          @input="handleTitleInput"
-          @clear="applyTitleSearch"
-          @keyup.enter="applyTitleSearch"
-        />
-      </label>
-
-      <label class="session-filter-field">
-        <span>Collector</span>
-        <el-select
-          v-model="selectedCollectorId"
-          class="session-filter-select"
-          :loading="collectorsLoading"
-          placeholder="All collectors"
-          aria-label="Filter by collector"
-          @change="handleCollectorChange"
-        >
-          <el-option label="All collectors" value="" />
-          <el-option
-            v-for="collector in collectors"
-            :key="collector.id"
-            :label="collector.name"
-            :value="collector.id"
-          />
-        </el-select>
-      </label>
-
-      <label class="session-filter-field">
-        <span>Agent</span>
-        <el-select
-          v-model="selectedAgent"
-          class="session-filter-select"
-          placeholder="All agents"
-          aria-label="Filter by agent"
-          @change="handleAgentChange"
-        >
-          <el-option label="All agents" value="" />
-          <el-option
-            v-for="agent in agentOptions"
-            :key="agent"
-            :label="agent"
-            :value="agent"
-          />
-        </el-select>
-      </label>
-    </section>
-
     <el-alert
       v-if="errorMessage"
       class="error-alert"
@@ -933,15 +810,6 @@ onActivated(() => {
       v-if="warningMessage"
       class="warning-alert"
       :title="warningMessage"
-      type="warning"
-      show-icon
-      :closable="false"
-    />
-
-    <el-alert
-      v-if="collectorsErrorMessage"
-      class="warning-alert"
-      :title="collectorsErrorMessage"
       type="warning"
       show-icon
       :closable="false"

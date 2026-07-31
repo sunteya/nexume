@@ -4,9 +4,15 @@ import type {
   AvailableSessionDirectory,
   CreateProjectInput,
   ProjectInfo,
+  ProjectList,
+  ProjectSessionFilters,
   UpdateProjectInput,
 } from "@nexume/contracts"
-import type { ProjectStore, SessionStore } from "@nexume/storage"
+import type {
+  ProjectRecord,
+  ProjectStore,
+  SessionStore,
+} from "@nexume/storage"
 
 export class ProjectManagementError extends Error {
   constructor(
@@ -55,13 +61,31 @@ export class ProjectManagementService {
     private readonly sessions: SessionStore,
   ) {}
 
-  list(): ProjectInfo[] {
-    return this.projects.list()
+  list(filters: ProjectSessionFilters = {}): ProjectList {
+    const counts = this.sessions.countActiveByScope(filters)
+    return {
+      items: this.projects
+        .list()
+        .map((project) =>
+          this.toInfo(project, counts.projects.get(project.id) ?? 0),
+        ),
+      unassignedSessionCount: counts.unassigned,
+    }
+  }
+
+  private toInfo(project: ProjectRecord, sessionCount?: number): ProjectInfo {
+    return {
+      ...project,
+      sessionCount:
+        sessionCount ??
+        this.sessions.countActiveByScope().projects.get(project.id) ??
+        0,
+    }
   }
 
   private assertDirectoriesAvailable(
     input: CreateProjectInput,
-    existing: ProjectInfo | undefined,
+    existing: ProjectRecord | undefined,
   ): void {
     const available = new Set(
       this.sessions
@@ -88,7 +112,7 @@ export class ProjectManagementService {
   create(input: CreateProjectInput): ProjectInfo {
     try {
       this.assertDirectoriesAvailable(input, undefined)
-      return this.projects.create({ id: randomUUID(), ...input })
+      return this.toInfo(this.projects.create({ id: randomUUID(), ...input }))
     } catch (error) {
       mapStorageError(error)
     }
@@ -106,7 +130,7 @@ export class ProjectManagementService {
       }
       this.assertDirectoriesAvailable(input, existing)
       const project = this.projects.update(id, input)
-      return project!
+      return this.toInfo(project!)
     } catch (error) {
       if (error instanceof ProjectManagementError) throw error
       mapStorageError(error)

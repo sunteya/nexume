@@ -20,7 +20,7 @@ import {
   MoreHorizontal,
   Plus,
 } from "lucide-vue-next"
-import { computed, onMounted, ref } from "vue"
+import { computed, onMounted, ref, watch } from "vue"
 
 import type {
   AvailableSessionDirectory,
@@ -32,6 +32,10 @@ import type { ProjectClient } from "./client"
 const props = defineProps<{
   client: ProjectClient
   activeProjectId?: string
+  sessionRevision?: number
+  titleQuery?: string
+  collectorId?: string
+  agent?: string
 }>()
 
 const emit = defineEmits<{
@@ -40,6 +44,7 @@ const emit = defineEmits<{
 }>()
 
 const projects = ref<ProjectInfo[]>([])
+const unassignedSessionCount = ref(0)
 const availableDirectories = ref<AvailableSessionDirectory[]>([])
 const loading = ref(false)
 const dialogVisible = ref(false)
@@ -49,6 +54,7 @@ const name = ref("")
 const groupName = ref("")
 const selectedDirectoryKeys = ref<string[]>([])
 const collapsedGroupKeys = ref(new Set<string>())
+let latestProjectRequest = 0
 
 function directoryKey(directory: ProjectDirectory): string {
   return JSON.stringify([directory.collectorId, directory.directory])
@@ -133,22 +139,40 @@ function expandGroup(group: string | undefined): void {
   collapsedGroupKeys.value = collapsed
 }
 
-async function load(): Promise<void> {
+async function loadProjects(): Promise<void> {
+  const requestId = ++latestProjectRequest
   loading.value = true
   try {
-    const [projectItems, directories] = await Promise.all([
-      props.client.list(),
-      props.client.listDirectories(),
-    ])
-    projects.value = projectItems
-    availableDirectories.value = directories
+    const result = await props.client.list({
+      title: props.titleQuery || undefined,
+      collectorId: props.collectorId || undefined,
+      agent: props.agent || undefined,
+    })
+    if (requestId !== latestProjectRequest) return
+    projects.value = result.items
+    unassignedSessionCount.value = result.unassignedSessionCount
   } catch (error) {
+    if (requestId !== latestProjectRequest) return
     ElMessage.error(
       error instanceof Error ? error.message : "Unable to load projects.",
     )
   } finally {
-    loading.value = false
+    if (requestId === latestProjectRequest) loading.value = false
   }
+}
+
+async function loadDirectories(): Promise<void> {
+  try {
+    availableDirectories.value = await props.client.listDirectories()
+  } catch (error) {
+    ElMessage.error(
+      error instanceof Error ? error.message : "Unable to load directories.",
+    )
+  }
+}
+
+async function load(): Promise<void> {
+  await Promise.all([loadProjects(), loadDirectories()])
 }
 
 function openCreate(): void {
@@ -223,6 +247,17 @@ function handleCommand(command: string, project: ProjectInfo): void {
 }
 
 onMounted(() => void load())
+
+watch(
+  () =>
+    [
+      props.sessionRevision,
+      props.titleQuery,
+      props.collectorId,
+      props.agent,
+    ] as const,
+  () => void loadProjects(),
+)
 </script>
 
 <template>
@@ -249,6 +284,7 @@ onMounted(() => void load())
       >
         <folder-open :size="16" :stroke-width="1.8" />
         <span>Unassigned</span>
+        <small>{{ unassignedSessionCount }}</small>
       </button>
 
       <div
@@ -264,7 +300,7 @@ onMounted(() => void load())
         >
           <folder :size="16" :stroke-width="1.8" />
           <span>{{ project.name }}</span>
-          <small>{{ project.directories.length }}</small>
+          <small>{{ project.sessionCount }}</small>
         </button>
         <el-dropdown
           trigger="click"
@@ -328,7 +364,7 @@ onMounted(() => void load())
             >
               <folder :size="16" :stroke-width="1.8" />
               <span>{{ project.name }}</span>
-              <small>{{ project.directories.length }}</small>
+              <small>{{ project.sessionCount }}</small>
             </button>
             <el-dropdown
               trigger="click"

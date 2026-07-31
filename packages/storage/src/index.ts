@@ -33,6 +33,8 @@ export {
 } from "./collector"
 export {
   SessionStore,
+  type ActiveSessionScopeCounts,
+  type ActiveSessionCountFilters,
   type AgentId,
   type ApplySourceSessionInput,
   type AvailableSessionDirectoryRecord,

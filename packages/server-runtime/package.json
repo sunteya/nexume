@@ -13,6 +13,7 @@
     "@nexume/contracts": "workspace:*",
     "@nexume/server-core": "workspace:*",
     "@nexume/storage": "workspace:*",
+    "@earendil-works/pi-ai": "^0.83.0",
     "@socket.io/bun-engine": "^0.1.1",
     "socket.io": "^4.8.3"
   },

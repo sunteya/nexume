@@ -11,6 +11,7 @@ import { migrations, type MigrationContext } from "./migrations"
 import { SessionStore } from "./session"
 import { ProjectStore } from "./project"
 import { SessionSyncStore } from "./session-sync"
+import { SettingsStore } from "./settings"
 
 export {
   AlreadyInitializedError,
@@ -22,6 +23,7 @@ export {
   SettingsStore,
   type SettingKey,
   type SettingValueMap,
+  type StoredAiSettings,
 } from "./settings"
 export {
   CollectorStore,
@@ -72,6 +74,7 @@ export interface AppStorage {
   projects: ProjectStore
   sessions: SessionStore
   sessionSync: SessionSyncStore
+  settings: SettingsStore
   close(): void
 }
 
@@ -133,6 +136,7 @@ export async function openStorage(
     const sessions = new SessionStore(db)
     const projects = new ProjectStore(db)
     const sessionSync = new SessionSyncStore(db)
+    const settings = new SettingsStore(db)
     return {
       dataDir,
       cacheDir,
@@ -143,6 +147,7 @@ export async function openStorage(
       projects,
       sessions,
       sessionSync,
+      settings,
       close: () => db.close(),
     }
   } catch (error) {

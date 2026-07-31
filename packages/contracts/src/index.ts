@@ -1,10 +1,21 @@
 export const sessionBatchSizes = [20, 50, 100] as const
 export const sessionDetailPageSizes = [20, 50, 100] as const
 export const sessionStatuses = ["active", "archived", "deleted"] as const
+export const aiProviderIds = ["openai", "anthropic"] as const
+export const aiThinkingLevels = [
+  null,
+  "off",
+  "low",
+  "medium",
+  "high",
+  "max",
+] as const
 
 export type SessionBatchSize = (typeof sessionBatchSizes)[number]
 export type SessionDetailPageSize = (typeof sessionDetailPageSizes)[number]
 export type SessionStatus = (typeof sessionStatuses)[number]
+export type AiProviderId = (typeof aiProviderIds)[number]
+export type AiThinkingLevel = (typeof aiThinkingLevels)[number]
 export type AgentId = string
 export type CollectorConnectionType = "local" | "remote"
 export type SessionSyncMode = "incremental" | "reconcile"
@@ -38,11 +49,7 @@ export interface SessionSummary extends CollectedSessionSummary {
 }
 
 export type SessionDetailRole =
-  | "user"
-  | "assistant"
-  | "system"
-  | "tool"
-  | "unknown"
+  "user" | "assistant" | "system" | "tool" | "unknown"
 export type SessionDetailPartType =
   | "text"
   | "reasoning"
@@ -203,6 +210,48 @@ export interface RuntimeInfo {
   urls: string[]
 }
 
+export interface AiSettingsInput {
+  provider: AiProviderId
+  model: string
+  baseUrl: string
+  apiKey?: string
+  thinkingLevel: AiThinkingLevel
+}
+
+export interface AiSettings {
+  provider: AiProviderId
+  model: string
+  baseUrl: string
+  thinkingLevel: AiThinkingLevel
+  hasApiKey: boolean
+}
+
+export interface AiSettingsResponse {
+  settings: AiSettings | null
+}
+
+export interface AiModelInfo {
+  id: string
+  name: string
+  protocol: string
+  baseUrl: string
+  thinkingLevels: AiThinkingLevel[]
+}
+
+export interface AiProviderInfo {
+  id: AiProviderId
+  name: string
+  models: AiModelInfo[]
+}
+
+export interface AiCatalog {
+  providers: AiProviderInfo[]
+}
+
+export interface AiValidationResult {
+  latencyMs: number
+}
+
 export interface CollectorStatus {
   available: boolean
   message?: string
@@ -300,6 +349,64 @@ export interface CollectorSocketData {
 export function assertAgentId(value: unknown): asserts value is AgentId {
   if (typeof value !== "string" || !/^[a-z][a-z0-9-]{0,63}$/.test(value)) {
     throw new Error("Agent ID 无效。")
+  }
+}
+
+export function assertAiSettingsInput(
+  value: unknown,
+): asserts value is AiSettingsInput {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("AI 设置参数无效。")
+  }
+
+  const input = value as Partial<AiSettingsInput>
+  if (!aiProviderIds.includes(input.provider as AiProviderId)) {
+    throw new Error("AI Provider 无效。")
+  }
+  if (
+    typeof input.model !== "string" ||
+    !input.model.trim() ||
+    input.model.length > 512
+  ) {
+    throw new Error("AI 模型无效。")
+  }
+  if (!aiThinkingLevels.includes(input.thinkingLevel as AiThinkingLevel)) {
+    throw new Error("AI 思考强度无效。")
+  }
+  if (
+    input.apiKey !== undefined &&
+    (typeof input.apiKey !== "string" || input.apiKey.length > 8192)
+  ) {
+    throw new Error("AI 密钥无效。")
+  }
+  if (
+    typeof input.baseUrl !== "string" ||
+    !input.baseUrl.trim() ||
+    input.baseUrl.length > 2048
+  ) {
+    throw new Error("AI 地址无效。")
+  }
+
+  let url: URL
+  try {
+    url = new URL(input.baseUrl)
+  } catch {
+    throw new Error("AI 地址必须是有效 URL。")
+  }
+  if (
+    (url.protocol !== "http:" && url.protocol !== "https:") ||
+    url.username ||
+    url.password
+  ) {
+    throw new Error("AI 地址必须使用 HTTP 或 HTTPS，且不能包含凭据。")
+  }
+  if (
+    url.protocol === "http:" &&
+    url.hostname !== "localhost" &&
+    url.hostname !== "127.0.0.1" &&
+    url.hostname !== "[::1]"
+  ) {
+    throw new Error("AI 地址仅允许对本机回环地址使用 HTTP。")
   }
 }
 

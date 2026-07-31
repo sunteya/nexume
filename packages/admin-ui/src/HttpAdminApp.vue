@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   type CollectorClient,
+  type AiSettingsClient,
   type ProjectClient,
   type SessionClient,
 } from "./client"
@@ -11,6 +12,7 @@ import { ref, shallowRef } from "vue"
 
 import {
   createHttpCollectorClient,
+  createHttpAiSettingsClient,
   createHttpInitializationClient,
   createHttpProjectClient,
   createHttpSessionClient,
@@ -21,6 +23,7 @@ import AuthLayout from "./AuthLayout.vue"
 import InitializationApp from "./InitializationApp.vue"
 import SessionApp from "./SessionApp.vue"
 import ProjectSidebar from "./ProjectSidebar.vue"
+import SettingsApp from "./SettingsApp.vue"
 
 const props = withDefaults(defineProps<{ mode?: AppMode }>(), {
   mode: "server",
@@ -33,6 +36,7 @@ const authError = ref("")
 const client = shallowRef<SessionClient>()
 const collectorClient = shallowRef<CollectorClient>()
 const projectClient = shallowRef<ProjectClient>()
+const aiSettingsClient = shallowRef<AiSettingsClient>()
 const activeView = ref<AppView>("sessions")
 const selectedCollectorId = ref("")
 const selectedProjectId = ref<string>()
@@ -47,6 +51,7 @@ function clearAccessToken(): void {
   client.value = undefined
   collectorClient.value = undefined
   projectClient.value = undefined
+  aiSettingsClient.value = undefined
   authError.value =
     "The access token is invalid. Enter a valid token to continue."
   selectedCollectorId.value = ""
@@ -60,6 +65,7 @@ function disconnect(): void {
   client.value = undefined
   collectorClient.value = undefined
   projectClient.value = undefined
+  aiSettingsClient.value = undefined
   authError.value = ""
   activeView.value = "sessions"
   selectedCollectorId.value = ""
@@ -77,10 +83,15 @@ function createProjectClient(token: string): ProjectClient {
   return createHttpProjectClient(token, clearAccessToken)
 }
 
+function createAiSettingsClient(token: string): AiSettingsClient {
+  return createHttpAiSettingsClient(token, clearAccessToken)
+}
+
 if (accessToken.value) {
   client.value = createClient(accessToken.value)
   collectorClient.value = createCollectorClient(accessToken.value)
   projectClient.value = createProjectClient(accessToken.value)
+  aiSettingsClient.value = createAiSettingsClient(accessToken.value)
 }
 
 function connect(): void {
@@ -95,6 +106,7 @@ function connect(): void {
   client.value = createClient(token)
   collectorClient.value = createCollectorClient(token)
   projectClient.value = createProjectClient(token)
+  aiSettingsClient.value = createAiSettingsClient(token)
   tokenInput.value = ""
   authError.value = ""
   activeView.value = "sessions"
@@ -107,6 +119,7 @@ function handleInitialized(token: string): void {
     client.value = createClient(token)
     collectorClient.value = createCollectorClient(token)
     projectClient.value = createProjectClient(token)
+    aiSettingsClient.value = createAiSettingsClient(token)
   }
   initializationReady.value = true
 }
@@ -143,6 +156,7 @@ function bootstrap(): void {
   client.value = createClient(token)
   collectorClient.value = createCollectorClient(token)
   projectClient.value = createProjectClient(token)
+  aiSettingsClient.value = createAiSettingsClient(token)
   bootstrapReady.value = true
 }
 
@@ -167,7 +181,7 @@ bootstrap()
     />
 
     <main
-      v-else-if="client && collectorClient && projectClient"
+      v-else-if="client && collectorClient && projectClient && aiSettingsClient"
       class="app-shell"
     >
       <app-top-bar
@@ -179,6 +193,7 @@ bootstrap()
 
       <div class="app-workspace">
         <project-sidebar
+          v-if="activeView !== 'settings'"
           :client="projectClient"
           :active-project-id="selectedProjectId"
           @change="projectRevision++"
@@ -196,10 +211,11 @@ bootstrap()
             @collector-change="selectedCollectorId = $event"
           />
           <collector-app
-            v-else
+            v-else-if="activeView === 'collectors'"
             :client="collectorClient"
             @view-sessions="viewCollectorSessions"
           />
+          <settings-app v-else :client="aiSettingsClient" />
         </keep-alive>
       </div>
     </main>

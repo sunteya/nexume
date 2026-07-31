@@ -12,6 +12,7 @@ import { createRequestHandler } from "./http"
 import { SessionSyncService } from "./session-sync"
 import { ProjectManagementService } from "./project-management"
 import { SessionManagementService } from "./session-management"
+import { AiSettingsService } from "./ai-settings"
 
 export interface StartServerRuntimeOptions {
   accessToken: string
@@ -89,6 +90,7 @@ export function startServerRuntime(options: StartServerRuntimeOptions) {
     getRemoteDetail: (collectorId, request) =>
       collectorSockets.getSessionDetail(collectorId, request),
   })
+  const aiSettings = new AiSettingsService(options.storage.settings)
   collectors.setRemoteDisconnect(collectorSockets.disconnectCollector)
   collectors.setSyncTrigger((id) => {
     if (id === "local") {
@@ -117,6 +119,7 @@ export function startServerRuntime(options: StartServerRuntimeOptions) {
     },
     collectors,
     sessions,
+    aiSettings,
     projects,
     getRuntimeInfo: () =>
       options.getRuntimeInfo?.(server.port ?? options.port) ?? {
@@ -158,6 +161,7 @@ export function startServerRuntime(options: StartServerRuntimeOptions) {
     core,
     collectors,
     sessions,
+    aiSettings,
     createBootstrapUrl(host = "127.0.0.1"): string {
       return `http://${host}:${server.port ?? options.port}/#accessToken=${encodeURIComponent(options.accessToken)}`
     },

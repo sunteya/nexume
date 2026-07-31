@@ -1,7 +1,14 @@
 import type { Database } from "bun:sqlite"
 
+import type { AiSettingsInput } from "@nexume/contracts"
+
+export interface StoredAiSettings extends Omit<AiSettingsInput, "apiKey"> {
+  apiKey: string
+}
+
 export interface SettingValueMap {
   "app.initialized_at": number
+  "ai.configuration": StoredAiSettings
 }
 
 export type SettingKey = keyof SettingValueMap

@@ -5,6 +5,7 @@ import {
   assertCollectorRuntimeMetadata,
   assertCollectorSocketAuth,
   assertBeginSessionSyncRequest,
+  assertAiSettingsInput,
   assertCollectedSessionDetailPage,
   assertGetSessionDetailRequest,
   assertListSessionsParams,
@@ -12,6 +13,55 @@ import {
   assertSessionSyncBatchRequest,
   assertUpdateSessionTitleRequest,
 } from "./index"
+
+describe("AI settings contracts", () => {
+  test("accepts supported providers and nullable default thinking", () => {
+    expect(() =>
+      assertAiSettingsInput({
+        provider: "openai",
+        model: "gpt-5.6",
+        baseUrl: "https://api.openai.com/v1",
+        apiKey: "secret",
+        thinkingLevel: null,
+      }),
+    ).not.toThrow()
+    expect(() =>
+      assertAiSettingsInput({
+        provider: "anthropic",
+        model: "claude-sonnet",
+        baseUrl: "http://127.0.0.1:8080",
+        thinkingLevel: "off",
+      }),
+    ).not.toThrow()
+  })
+
+  test("rejects unsupported providers, levels, and unsafe URLs", () => {
+    const valid = {
+      provider: "openai",
+      model: "gpt-5.6",
+      baseUrl: "https://api.openai.com/v1",
+      thinkingLevel: "medium",
+    }
+    expect(() =>
+      assertAiSettingsInput({ ...valid, provider: "google" }),
+    ).toThrow("AI Provider 无效")
+    expect(() =>
+      assertAiSettingsInput({ ...valid, thinkingLevel: "minimal" }),
+    ).toThrow("AI 思考强度无效")
+    expect(() =>
+      assertAiSettingsInput({
+        ...valid,
+        baseUrl: "https://user:password@example.com/v1",
+      }),
+    ).toThrow("不能包含凭据")
+    expect(() =>
+      assertAiSettingsInput({
+        ...valid,
+        baseUrl: "http://192.168.1.10:8080/v1",
+      }),
+    ).toThrow("仅允许对本机回环地址使用 HTTP")
+  })
+})
 
 describe("Session query contracts", () => {
   test("accepts supported batch queries", () => {

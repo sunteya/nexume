@@ -1,19 +1,19 @@
 <script setup lang="ts">
-import { ElButton, ElTooltip } from "element-plus";
-import { Database, List, LogOut } from "lucide-vue-next";
+import { ElButton, ElTooltip } from "element-plus"
+import { Database, List, LogOut, Settings } from "lucide-vue-next"
 
-export type AppMode = "server" | "desktop";
-export type AppView = "sessions" | "collectors";
+export type AppMode = "server" | "desktop"
+export type AppView = "sessions" | "collectors" | "settings"
 
 defineProps<{
-  mode: AppMode;
-  activeView: AppView;
-}>();
+  mode: AppMode
+  activeView: AppView
+}>()
 
 const emit = defineEmits<{
-  navigate: [view: AppView];
-  disconnect: [];
-}>();
+  navigate: [view: AppView]
+  disconnect: []
+}>()
 </script>
 
 <template>
@@ -54,11 +54,34 @@ const emit = defineEmits<{
           <span>Collectors</span>
         </button>
       </el-tooltip>
+
+      <el-tooltip content="Settings" placement="bottom" :show-after="500">
+        <button
+          type="button"
+          class="app-navigation-item"
+          :class="{ 'is-active': activeView === 'settings' }"
+          aria-label="Settings"
+          :aria-current="activeView === 'settings' ? 'page' : undefined"
+          @click="emit('navigate', 'settings')"
+        >
+          <settings :size="16" :stroke-width="1.8" />
+          <span>Settings</span>
+        </button>
+      </el-tooltip>
     </nav>
 
     <div class="topbar-actions">
-      <el-tooltip v-if="mode === 'server'" content="Sign out" placement="bottom">
-        <el-button class="topbar-icon-button" circle aria-label="Sign out" @click="emit('disconnect')">
+      <el-tooltip
+        v-if="mode === 'server'"
+        content="Sign out"
+        placement="bottom"
+      >
+        <el-button
+          class="topbar-icon-button"
+          circle
+          aria-label="Sign out"
+          @click="emit('disconnect')"
+        >
           <log-out :size="16" :stroke-width="1.8" />
         </el-button>
       </el-tooltip>

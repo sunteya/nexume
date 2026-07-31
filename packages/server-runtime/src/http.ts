@@ -3,12 +3,17 @@ import { resolve, sep } from "node:path"
 
 import {
   assertCollectorName,
+  assertAiSettingsInput,
   assertCreateCollectorInput,
   assertGetSessionDetailRequest,
   assertListSessionsParams,
   assertProjectInput,
   assertUpdateSessionTitleRequest,
   type AvailableSessionDirectory,
+  type AiCatalog,
+  type AiSettings,
+  type AiSettingsInput,
+  type AiValidationResult,
   type CreateCollectorInput,
   type CreateCollectorResult,
   type CreateProjectInput,
@@ -29,6 +34,7 @@ import { InvalidSessionCursorError, type ServerCore } from "@nexume/server-core"
 import { AlreadyInitializedError } from "@nexume/storage"
 
 import { CollectorManagementError } from "./collector-management"
+import { AiSettingsError } from "./ai-settings"
 import { ProjectManagementError } from "./project-management"
 import { SessionManagementError } from "./session-management"
 
@@ -70,6 +76,12 @@ export interface RequestHandlerOptions {
       collectorId: string,
       request: UpdateSessionTitleRequest,
     ): Promise<SessionSummary>
+  }
+  aiSettings?: {
+    getCatalog(): AiCatalog
+    get(): AiSettings | undefined
+    save(input: AiSettingsInput): AiSettings
+    validate(input: AiSettingsInput): Promise<AiValidationResult>
   }
   getRuntimeInfo?: () => RuntimeInfo
   webRoot?: string
@@ -294,6 +306,77 @@ export function createRequestHandler(options: RequestHandlerOptions) {
         return sensitiveJson(options.getRuntimeInfo())
       }
 
+      if (request.method === "GET" && url.pathname === "/api/ai/catalog") {
+        if (!options.aiSettings) {
+          return errorResponse(
+            "not_found",
+            "The API endpoint does not exist.",
+            404,
+          )
+        }
+        return json(options.aiSettings.getCatalog())
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/ai/settings") {
+        if (!options.aiSettings) {
+          return errorResponse(
+            "not_found",
+            "The API endpoint does not exist.",
+            404,
+          )
+        }
+        return sensitiveJson({ settings: options.aiSettings.get() ?? null })
+      }
+
+      if (
+        (request.method === "PUT" && url.pathname === "/api/ai/settings") ||
+        (request.method === "POST" &&
+          url.pathname === "/api/ai/settings/validate")
+      ) {
+        if (!options.aiSettings) {
+          return errorResponse(
+            "not_found",
+            "The API endpoint does not exist.",
+            404,
+          )
+        }
+
+        let input: AiSettingsInput
+        try {
+          const body = await parseJsonBody(request)
+          assertAiSettingsInput(body)
+          input = body
+        } catch (error) {
+          const message =
+            error instanceof SyntaxError
+              ? "The request body is not valid JSON."
+              : error instanceof Error
+                ? error.message
+                : "The request is invalid."
+          return errorResponse("invalid_request", message, 400)
+        }
+
+        try {
+          return sensitiveJson(
+            request.method === "PUT"
+              ? options.aiSettings.save(input)
+              : await options.aiSettings.validate(input),
+          )
+        } catch (error) {
+          if (error instanceof AiSettingsError) {
+            return errorResponse(error.code, error.message, error.status)
+          }
+          options.onError?.(error)
+          return errorResponse(
+            "internal_error",
+            request.method === "PUT"
+              ? "Unable to save AI settings."
+              : "Unable to validate AI settings.",
+            500,
+          )
+        }
+      }
+
       if (request.method === "GET" && url.pathname === "/api/sessions") {
         let params: ListSessionsParams
 
@@ -338,7 +421,9 @@ export function createRequestHandler(options: RequestHandlerOptions) {
           const candidate = {
             agent: decodeURIComponent(sessionMatch[2]!),
             id: decodeURIComponent(sessionMatch[3]!),
-            limit: Number(url.searchParams.get("limit") ?? "20") as SessionDetailPageSize,
+            limit: Number(
+              url.searchParams.get("limit") ?? "20",
+            ) as SessionDetailPageSize,
             cursor: url.searchParams.get("cursor") ?? undefined,
           }
           assertGetSessionDetailRequest(candidate)

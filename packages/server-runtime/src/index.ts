@@ -1,4 +1,9 @@
 export {
+  AiSettingsError,
+  AiSettingsService,
+  type AiSettingsServiceOptions,
+} from "./ai-settings"
+export {
   CollectorManagementError,
   CollectorManagementService,
   type CollectorManagementOptions,

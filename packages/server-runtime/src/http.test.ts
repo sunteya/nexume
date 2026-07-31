@@ -160,6 +160,92 @@ describe("Server HTTP API", () => {
     })
   })
 
+  test("serves authenticated AI settings without exposing the API key", async () => {
+    const savedInputs: unknown[] = []
+    const handler = createRequestHandler({
+      accessToken: token,
+      core: createCore(),
+      aiSettings: {
+        getCatalog: () => ({
+          providers: [
+            {
+              id: "openai",
+              name: "OpenAI",
+              models: [
+                {
+                  id: "gpt-test",
+                  name: "GPT Test",
+                  protocol: "openai-responses",
+                  baseUrl: "https://api.openai.com/v1",
+                  thinkingLevels: [null, "off", "low", "medium", "high"],
+                },
+              ],
+            },
+          ],
+        }),
+        get: () => ({
+          provider: "openai",
+          model: "gpt-test",
+          baseUrl: "https://api.openai.com/v1",
+          thinkingLevel: null,
+          hasApiKey: true,
+        }),
+        save: (input) => {
+          savedInputs.push(input)
+          return {
+            provider: input.provider,
+            model: input.model,
+            baseUrl: input.baseUrl,
+            thinkingLevel: input.thinkingLevel,
+            hasApiKey: true,
+          }
+        },
+        validate: async () => ({ latencyMs: 12 }),
+      },
+    })
+
+    expect(
+      (await handler(new Request("http://localhost/api/ai/settings"))).status,
+    ).toBe(401)
+    const settings = await handler(
+      new Request("http://localhost/api/ai/settings", {
+        headers: authorization,
+      }),
+    )
+    expect(settings.headers.get("cache-control")).toBe("no-store")
+    expect(JSON.stringify(await settings.json())).not.toContain("secret")
+
+    const saved = await handler(
+      new Request("http://localhost/api/ai/settings", {
+        method: "PUT",
+        headers: { ...authorization, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: "openai",
+          model: "gpt-test",
+          baseUrl: "https://api.openai.com/v1",
+          apiKey: "secret",
+          thinkingLevel: null,
+        }),
+      }),
+    )
+    expect(saved.status).toBe(200)
+    expect(savedInputs).toHaveLength(1)
+
+    const validated = await handler(
+      new Request("http://localhost/api/ai/settings/validate", {
+        method: "POST",
+        headers: { ...authorization, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: "openai",
+          model: "gpt-test",
+          baseUrl: "https://api.openai.com/v1",
+          thinkingLevel: "off",
+        }),
+      }),
+    )
+    expect(await validated.json()).toEqual({ latencyMs: 12 })
+  })
+
   test("passes a validated cursor query to Server Core", async () => {
     let received: unknown
     const handler = createRequestHandler({

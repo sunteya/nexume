@@ -1,5 +1,9 @@
 import type {
   AvailableSessionDirectory,
+  AiCatalog,
+  AiSettings,
+  AiSettingsInput,
+  AiValidationResult,
   CollectorTokenResult,
   CompleteInitializationInput,
   CreateCollectorInput,
@@ -54,4 +58,11 @@ export interface ProjectClient {
   create(input: CreateProjectInput): Promise<ProjectInfo>
   update(id: string, input: CreateProjectInput): Promise<ProjectInfo>
   delete(id: string): Promise<void>
+}
+
+export interface AiSettingsClient {
+  getCatalog(): Promise<AiCatalog>
+  getSettings(): Promise<AiSettings | null>
+  save(input: AiSettingsInput): Promise<AiSettings>
+  validate(input: AiSettingsInput): Promise<AiValidationResult>
 }

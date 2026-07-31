@@ -1,4 +1,5 @@
 import type {
+  AiSettingsClient,
   CollectorClient,
   InitializationClient,
   ProjectClient,
@@ -6,6 +7,11 @@ import type {
 } from "./client"
 import type {
   AvailableSessionDirectory,
+  AiCatalog,
+  AiSettings,
+  AiSettingsInput,
+  AiSettingsResponse,
+  AiValidationResult,
   CollectorTokenResult,
   CompleteInitializationInput,
   CreateCollectorInput,
@@ -38,6 +44,68 @@ interface ProjectListResult {
 
 interface DirectoryListResult {
   items: AvailableSessionDirectory[]
+}
+
+export function createHttpAiSettingsClient(
+  accessToken: string,
+  onUnauthorized: () => void,
+): AiSettingsClient {
+  async function request(
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> {
+    const response = await fetch(input, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        ...init?.headers,
+      },
+    })
+    if (response.status === 401) {
+      onUnauthorized()
+      throw new Error("The access token is invalid.")
+    }
+    return response
+  }
+
+  async function submit(
+    path: string,
+    method: "PUT" | "POST",
+    input: AiSettingsInput,
+  ): Promise<Response> {
+    return request(path, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    })
+  }
+
+  return {
+    async getCatalog() {
+      const response = await request("/api/ai/catalog")
+      if (!response.ok)
+        throw await responseError(response, "Unable to load AI models.")
+      return (await response.json()) as AiCatalog
+    },
+    async getSettings() {
+      const response = await request("/api/ai/settings")
+      if (!response.ok)
+        throw await responseError(response, "Unable to load AI settings.")
+      return ((await response.json()) as AiSettingsResponse).settings
+    },
+    async save(input) {
+      const response = await submit("/api/ai/settings", "PUT", input)
+      if (!response.ok)
+        throw await responseError(response, "Unable to save AI settings.")
+      return (await response.json()) as AiSettings
+    },
+    async validate(input) {
+      const response = await submit("/api/ai/settings/validate", "POST", input)
+      if (!response.ok)
+        throw await responseError(response, "Unable to validate AI settings.")
+      return (await response.json()) as AiValidationResult
+    },
+  }
 }
 
 async function responseError(

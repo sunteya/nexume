@@ -81,6 +81,29 @@ describe("Nexume storage", () => {
     second.close()
   })
 
+  test("persists AI settings including the nullable default thinking level", async () => {
+    const dataDir = createDataDir()
+    const first = await openStorage({ dataDir })
+    first.settings.set("ai.configuration", {
+      provider: "openai",
+      model: "gpt-test",
+      baseUrl: "https://api.openai.com/v1",
+      apiKey: "secret",
+      thinkingLevel: null,
+    })
+    first.close()
+
+    const second = await openStorage({ dataDir })
+    expect(second.settings.get("ai.configuration")).toEqual({
+      provider: "openai",
+      model: "gpt-test",
+      baseUrl: "https://api.openai.com/v1",
+      apiKey: "secret",
+      thinkingLevel: null,
+    })
+    second.close()
+  })
+
   test("runs TypeScript migrations with cache directory access", async () => {
     const storage = await openStorage({ dataDir: createDataDir() })
     const markerPath = join(storage.cacheDir, "migrated.txt")

@@ -75,6 +75,7 @@ describe("SessionManagementService", () => {
       collectors: storage.collectors,
       localSources: [source],
       updateRemote: async () => undefined,
+      getRemoteDetail: async () => undefined,
     })
 
     const updated = await service.updateTitle("local", {

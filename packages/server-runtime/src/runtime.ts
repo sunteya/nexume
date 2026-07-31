@@ -86,6 +86,8 @@ export function startServerRuntime(options: StartServerRuntimeOptions) {
     localSources: options.localSources,
     updateRemote: (collectorId, request) =>
       collectorSockets.updateSessionTitle(collectorId, request),
+    getRemoteDetail: (collectorId, request) =>
+      collectorSockets.getSessionDetail(collectorId, request),
   })
   collectors.setRemoteDisconnect(collectorSockets.disconnectCollector)
   collectors.setSyncTrigger((id) => {

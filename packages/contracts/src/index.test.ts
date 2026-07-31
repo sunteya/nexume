@@ -5,6 +5,8 @@ import {
   assertCollectorRuntimeMetadata,
   assertCollectorSocketAuth,
   assertBeginSessionSyncRequest,
+  assertCollectedSessionDetailPage,
+  assertGetSessionDetailRequest,
   assertListSessionsParams,
   assertProjectInput,
   assertSessionSyncBatchRequest,
@@ -131,6 +133,49 @@ describe("assertCollectorDescriptor", () => {
 })
 
 describe("Session sync contracts", () => {
+  test("validates paged Session detail requests and responses", () => {
+    expect(() =>
+      assertGetSessionDetailRequest({
+        agent: "opencode",
+        id: "session-1",
+        limit: 20,
+        cursor: "20",
+      }),
+    ).not.toThrow()
+    expect(() =>
+      assertCollectedSessionDetailPage(
+        {
+          session: {
+            id: "session-1",
+            agent: "opencode",
+            title: "Session",
+            directory: "/workspace",
+            createdAt: 100,
+            updatedAt: 200,
+          },
+          items: [
+            {
+              id: "message-1",
+              role: "assistant",
+              createdAt: 200,
+              parts: [{ id: "part-1", type: "text", text: "Result" }],
+            },
+          ],
+          hasMore: false,
+        },
+        "opencode",
+        "session-1",
+      ),
+    ).not.toThrow()
+    expect(() =>
+      assertGetSessionDetailRequest({
+        agent: "opencode",
+        id: "session-1",
+        limit: 25,
+      }),
+    ).toThrow("Session 详情参数无效")
+  })
+
   test("validates optimistic Session title updates", () => {
     expect(() =>
       assertUpdateSessionTitleRequest({

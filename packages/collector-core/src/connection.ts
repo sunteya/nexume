@@ -5,16 +5,23 @@ import type {
   CollectorRuntimeMetadata,
   CollectorSocketAuth,
   CollectorToServerEvents,
+  GetSessionDetailResponse,
   ServerToCollectorEvents,
   SessionSyncBatchResponse,
   UpdateSessionTitleResponse,
 } from "@nexume/contracts"
-import { assertUpdateSessionTitleRequest } from "@nexume/contracts"
+import {
+  assertGetSessionDetailRequest,
+  assertUpdateSessionTitleRequest,
+} from "@nexume/contracts"
 
 import {
   SessionTitleConflictError,
   SessionTitleNotFoundError,
   type CollectorDataSource,
+  SessionDetailCursorError,
+  SessionDetailNotFoundError,
+  type SessionDetailDataSource,
   type WritableCollectorDataSource,
 } from "./source"
 import {
@@ -52,6 +59,26 @@ function titleUpdateError(error: unknown): UpdateSessionTitleResponse {
     code = "session_title_conflict"
   } else if (error instanceof SessionTitleNotFoundError) {
     code = "session_not_found"
+  } else if (error instanceof CollectorUnavailableError) {
+    code = "collector_unavailable"
+  } else if (error instanceof UnsupportedCollectorDataError) {
+    code = "unsupported_collector_data"
+  }
+  return {
+    ok: false,
+    error: {
+      code,
+      message: error instanceof Error ? error.message : String(error),
+    },
+  }
+}
+
+function detailError(error: unknown): GetSessionDetailResponse {
+  let code = "session_detail_failed"
+  if (error instanceof SessionDetailNotFoundError) {
+    code = "session_not_found"
+  } else if (error instanceof SessionDetailCursorError) {
+    code = "invalid_cursor"
   } else if (error instanceof CollectorUnavailableError) {
     code = "collector_unavailable"
   } else if (error instanceof UnsupportedCollectorDataError) {
@@ -154,6 +181,23 @@ export class CollectorConnection {
         acknowledge({ ok: true, data: { session } })
       } catch (error) {
         acknowledge(titleUpdateError(error))
+      }
+    })
+    this.socket.on("sessions:detail:get", async (request, acknowledge) => {
+      try {
+        assertGetSessionDetailRequest(request)
+        const source = sources.get(request.agent)
+        if (!source || !("readSessionDetail" in source)) {
+          throw new UnsupportedCollectorDataError(
+            "该 Collector 不支持读取此 Agent 的 Session 详情。",
+          )
+        }
+        const data = await (
+          source as SessionDetailDataSource
+        ).readSessionDetail(request)
+        acknowledge({ ok: true, data })
+      } catch (error) {
+        acknowledge(detailError(error))
       }
     })
   }

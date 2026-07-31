@@ -31,6 +31,21 @@ function createDatabase(schema = true): string {
         time_updated INTEGER NOT NULL,
         time_archived INTEGER
       );
+      CREATE TABLE message (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        time_created INTEGER NOT NULL,
+        time_updated INTEGER NOT NULL,
+        data TEXT NOT NULL
+      );
+      CREATE TABLE part (
+        id TEXT PRIMARY KEY,
+        message_id TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        time_created INTEGER NOT NULL,
+        time_updated INTEGER NOT NULL,
+        data TEXT NOT NULL
+      );
     `)
 
     const insert = database.query<
@@ -61,6 +76,40 @@ function createDatabase(schema = true): string {
 
     insert.run("child", "Child", "session-25", 3_000, 3_000, null)
     insert.run("archived", "Archived", null, 4_000, 4_000, 4_100)
+    database
+      .query(
+        `INSERT INTO message (id, session_id, time_created, time_updated, data)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run(
+        "message-1",
+        "session-01",
+        110,
+        110,
+        JSON.stringify({ role: "assistant" }),
+      )
+    const insertPart = database.query(
+      `INSERT INTO part (
+         id, message_id, session_id, time_created, time_updated, data
+       ) VALUES (?, 'message-1', 'session-01', ?, ?, ?)`,
+    )
+    insertPart.run(
+      "part-text",
+      111,
+      111,
+      JSON.stringify({ type: "text", text: "Detail response" }),
+    )
+    insertPart.run(
+      "part-tool",
+      112,
+      112,
+      JSON.stringify({
+        type: "tool",
+        callID: "call-1",
+        tool: "Read",
+        state: { status: "completed", input: { path: "README.md" }, output: "ok" },
+      }),
+    )
   }
 
   database.close()
@@ -142,6 +191,24 @@ describe("OpenCodeCollector", () => {
         expectedUpdatedAt: 100,
       }),
     ).toThrow(SessionTitleConflictError)
+  })
+
+  test("reads normalized message and tool details", () => {
+    const collector = new OpenCodeCollector({ databasePath: createDatabase() })
+    const result = collector.readSessionDetail({ id: "session-01", limit: 20 })
+
+    expect(result.hasMore).toBe(false)
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        id: "message-1",
+        role: "assistant",
+        parts: [
+          expect.objectContaining({ type: "text", text: "Detail response" }),
+          expect.objectContaining({ type: "tool-call", name: "Read" }),
+          expect.objectContaining({ type: "tool-result", text: "ok" }),
+        ],
+      }),
+    ])
   })
 
   test("reports a missing database", () => {

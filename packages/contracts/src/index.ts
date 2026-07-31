@@ -1,7 +1,9 @@
 export const sessionBatchSizes = [20, 50, 100] as const
+export const sessionDetailPageSizes = [20, 50, 100] as const
 export const sessionStatuses = ["active", "archived", "deleted"] as const
 
 export type SessionBatchSize = (typeof sessionBatchSizes)[number]
+export type SessionDetailPageSize = (typeof sessionDetailPageSizes)[number]
 export type SessionStatus = (typeof sessionStatuses)[number]
 export type AgentId = string
 export type CollectorConnectionType = "local" | "remote"
@@ -33,6 +35,56 @@ export interface SessionSummary extends CollectedSessionSummary {
   collectorId: string
   collectorName: string
   deletedAt?: number
+}
+
+export type SessionDetailRole =
+  | "user"
+  | "assistant"
+  | "system"
+  | "tool"
+  | "unknown"
+export type SessionDetailPartType =
+  | "text"
+  | "reasoning"
+  | "tool-call"
+  | "tool-result"
+  | "file"
+  | "patch"
+  | "unknown"
+
+export interface SessionDetailPart {
+  id: string
+  type: SessionDetailPartType
+  text: string
+  name?: string
+  callId?: string
+  status?: string
+  truncated?: boolean
+}
+
+export interface SessionDetailMessage {
+  id: string
+  role: SessionDetailRole
+  createdAt: number
+  parts: SessionDetailPart[]
+}
+
+export interface GetSessionDetailRequest {
+  agent: AgentId
+  id: string
+  limit: SessionDetailPageSize
+  cursor?: string
+}
+
+export interface CollectedSessionDetailPage {
+  session: CollectedSessionSummary
+  items: SessionDetailMessage[]
+  hasMore: boolean
+  nextCursor?: string
+}
+
+export interface SessionDetailPage extends CollectedSessionDetailPage {
+  session: SessionSummary
 }
 
 export interface ListSessionsParams {
@@ -203,6 +255,10 @@ export type UpdateSessionTitleResponse =
   | { ok: true; data: UpdateSessionTitleResult }
   | { ok: false; error: CollectorProtocolError }
 
+export type GetSessionDetailResponse =
+  | { ok: true; data: CollectedSessionDetailPage }
+  | { ok: false; error: CollectorProtocolError }
+
 export type BeginSessionSyncResponse =
   | { ok: true; data: BeginSessionSyncResult }
   | { ok: false; error: CollectorProtocolError }
@@ -216,6 +272,10 @@ export interface ServerToCollectorEvents {
   "sessions:title:update": (
     request: UpdateSessionTitleRequest,
     acknowledge: (response: UpdateSessionTitleResponse) => void,
+  ) => void
+  "sessions:detail:get": (
+    request: GetSessionDetailRequest,
+    acknowledge: (response: GetSessionDetailResponse) => void,
   ) => void
 }
 
@@ -336,6 +396,126 @@ export function assertUpdateSessionTitleRequest(
     throw new Error("Session 标题修改参数无效。")
   }
   assertSafeTimestamp(request.expectedUpdatedAt, "Session 预期更新时间")
+}
+
+export function assertGetSessionDetailRequest(
+  value: unknown,
+): asserts value is GetSessionDetailRequest {
+  if (!value || typeof value !== "object") {
+    throw new Error("Session 详情参数无效。")
+  }
+  const request = value as Partial<GetSessionDetailRequest>
+  assertAgentId(request.agent)
+  if (
+    typeof request.id !== "string" ||
+    !request.id ||
+    request.id.length > 512 ||
+    !sessionDetailPageSizes.includes(request.limit as SessionDetailPageSize)
+  ) {
+    throw new Error("Session 详情参数无效。")
+  }
+  if (request.cursor !== undefined) {
+    if (
+      typeof request.cursor !== "string" ||
+      !request.cursor ||
+      request.cursor.length > 65_536
+    ) {
+      throw new Error("Session 详情游标无效。")
+    }
+  }
+}
+
+const sessionDetailPartTypes: SessionDetailPartType[] = [
+  "text",
+  "reasoning",
+  "tool-call",
+  "tool-result",
+  "file",
+  "patch",
+  "unknown",
+]
+const sessionDetailRoles: SessionDetailRole[] = [
+  "user",
+  "assistant",
+  "system",
+  "tool",
+  "unknown",
+]
+
+export function assertCollectedSessionDetailPage(
+  value: unknown,
+  expectedAgent?: AgentId,
+  expectedId?: string,
+): asserts value is CollectedSessionDetailPage {
+  if (!value || typeof value !== "object") {
+    throw new Error("Session 详情数据无效。")
+  }
+  const page = value as Partial<CollectedSessionDetailPage>
+  assertCollectedSessionSummary(page.session, expectedAgent)
+  if (expectedId !== undefined && page.session.id !== expectedId) {
+    throw new Error("Session 详情与请求不匹配。")
+  }
+  if (!Array.isArray(page.items) || page.items.length > 100) {
+    throw new Error("Session 详情消息数量无效。")
+  }
+  let detailTextLength = 0
+  for (const item of page.items) {
+    if (!item || typeof item !== "object") {
+      throw new Error("Session 详情消息无效。")
+    }
+    const message = item as Partial<SessionDetailMessage>
+    if (
+      typeof message.id !== "string" ||
+      !message.id ||
+      message.id.length > 512 ||
+      !sessionDetailRoles.includes(message.role as SessionDetailRole) ||
+      !Number.isSafeInteger(message.createdAt) ||
+      (message.createdAt as number) < 0 ||
+      !Array.isArray(message.parts) ||
+      message.parts.length > 500
+    ) {
+      throw new Error("Session 详情消息不完整。")
+    }
+    for (const part of message.parts) {
+      if (
+        !part ||
+        typeof part !== "object" ||
+        typeof part.id !== "string" ||
+        !part.id ||
+        part.id.length > 512 ||
+        !sessionDetailPartTypes.includes(part.type as SessionDetailPartType) ||
+        typeof part.text !== "string" ||
+        part.text.length > 262_144 ||
+        (part.name !== undefined &&
+          (typeof part.name !== "string" || part.name.length > 512)) ||
+        (part.callId !== undefined &&
+          (typeof part.callId !== "string" || part.callId.length > 512)) ||
+        (part.status !== undefined &&
+          (typeof part.status !== "string" || part.status.length > 128)) ||
+        (part.truncated !== undefined && typeof part.truncated !== "boolean")
+      ) {
+        throw new Error("Session 详情内容无效。")
+      }
+      detailTextLength += part.text.length
+      if (detailTextLength > 2 * 1024 * 1024) {
+        throw new Error("Session 详情内容过大。")
+      }
+    }
+  }
+  if (typeof page.hasMore !== "boolean") {
+    throw new Error("Session 详情分页状态无效。")
+  }
+  if (page.hasMore && !page.nextCursor) {
+    throw new Error("Session 详情游标缺失。")
+  }
+  if (
+    page.nextCursor !== undefined &&
+    (typeof page.nextCursor !== "string" ||
+      !page.nextCursor ||
+      page.nextCursor.length > 65_536)
+  ) {
+    throw new Error("Session 详情游标无效。")
+  }
 }
 
 export function assertSessionSyncCheckpoint(

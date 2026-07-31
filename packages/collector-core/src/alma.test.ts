@@ -39,6 +39,12 @@ function createDatabase(schema = true): string {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
+      CREATE TABLE chat_messages (
+        id TEXT PRIMARY KEY,
+        thread_id TEXT NOT NULL,
+        message TEXT NOT NULL,
+        timestamp TEXT NOT NULL
+      );
       INSERT INTO workspaces (id, path)
       VALUES ('workspace-1', '/workspace/alma-project');
     `)
@@ -93,6 +99,29 @@ function createDatabase(schema = true): string {
       timestamp(31_000),
       timestamp(31_000),
     )
+    database
+      .query(
+        `INSERT INTO chat_messages (id, thread_id, message, timestamp)
+         VALUES (?, ?, ?, ?)`,
+      )
+      .run(
+        "message-1",
+        "thread-01",
+        JSON.stringify({
+          id: "message-1",
+          role: "assistant",
+          parts: [
+            { type: "reasoning", text: "Thinking" },
+            {
+              type: "tool-Bash",
+              toolCallId: "call-1",
+              input: { command: "pwd" },
+              output: "/workspace/alma-project",
+            },
+          ],
+        }),
+        timestamp(1_100),
+      )
   }
 
   database.close()
@@ -186,6 +215,25 @@ describe("AlmaCollector", () => {
         expectedUpdatedAt: 1_000,
       }),
     ).toThrow(SessionTitleConflictError)
+  })
+
+  test("reads normalized reasoning and tool details", () => {
+    const collector = new AlmaCollector({ databasePath: createDatabase() })
+    const result = collector.readSessionDetail({ id: "thread-01", limit: 20 })
+
+    expect(result.items[0]).toMatchObject({
+      id: "message-1",
+      role: "assistant",
+      parts: [
+        { type: "reasoning", text: "Thinking" },
+        { type: "tool-call", name: "Bash", callId: "call-1" },
+        {
+          type: "tool-result",
+          name: "Bash",
+          text: "/workspace/alma-project",
+        },
+      ],
+    })
   })
 
   test("reports a missing database", () => {

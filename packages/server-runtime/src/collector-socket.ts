@@ -4,6 +4,8 @@ import {
   type CollectorRuntimeMetadata,
   type CollectorSocketData,
   type CollectorToServerEvents,
+  type GetSessionDetailRequest,
+  type GetSessionDetailResponse,
   type InterServerEvents,
   type ServerToCollectorEvents,
   type UpdateSessionTitleRequest,
@@ -157,7 +159,17 @@ export function createCollectorSocketServer(
         .emitWithAck(
           "sessions:title:update",
           request,
-        )) as UpdateSessionTitleResponse
+         )) as UpdateSessionTitleResponse
+    },
+    async getSessionDetail(
+      id: string,
+      request: GetSessionDetailRequest,
+    ): Promise<GetSessionDetailResponse | undefined> {
+      const socket = sockets.get(id)
+      if (!socket?.connected) return undefined
+      return (await socket
+        .timeout(10_000)
+        .emitWithAck("sessions:detail:get", request)) as GetSessionDetailResponse
     },
     async close(): Promise<void> {
       io.disconnectSockets(true)

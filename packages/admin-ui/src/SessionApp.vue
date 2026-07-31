@@ -13,7 +13,18 @@ import {
   ElTooltip,
   type TableInstance,
 } from "element-plus"
-import { Check, Pencil, RefreshCw, Search, X } from "lucide-vue-next"
+import {
+  ArrowLeft,
+  Brain,
+  Check,
+  FileText,
+  LoaderCircle,
+  Pencil,
+  RefreshCw,
+  Search,
+  Wrench,
+  X,
+} from "lucide-vue-next"
 import {
   computed,
   nextTick,
@@ -27,6 +38,8 @@ import {
 import type {
   CollectorQueryWarning,
   ManagedCollectorInfo,
+  SessionDetailMessage,
+  SessionDetailPart,
   SessionSummary,
 } from "@nexume/contracts"
 
@@ -79,9 +92,18 @@ const collectorsErrorMessage = ref("")
 const editingSessionKey = ref("")
 const editingTitle = ref("")
 const savingSessionKey = ref("")
+const selectedSession = ref<SessionSummary>()
+const detailMessages = ref<SessionDetailMessage[]>([])
+const detailCursor = ref<string>()
+const detailHasMore = ref(false)
+const detailLoading = ref(false)
+const detailErrorMessage = ref("")
 const table = ref<TableInstance>()
 const tableRegion = ref<HTMLElement>()
+const detailRegion = ref<HTMLElement>()
+const detailMessageRegion = ref<HTMLElement>()
 let latestRequest = 0
+let latestDetailRequest = 0
 let mounted = false
 let initialActivation = true
 let searchTimer: ReturnType<typeof setTimeout> | undefined
@@ -112,15 +134,130 @@ function getRowKey(session: SessionSummary): string {
   return `${session.collectorId}:${session.agent}:${session.id}`
 }
 
-function asSession(row: unknown): SessionSummary {
-  return row as SessionSummary
+function partHeading(part: SessionDetailPart): string {
+  if (part.type === "reasoning") return "Reasoning"
+  if (part.type === "tool-call") return part.name ? `Tool call: ${part.name}` : "Tool call"
+  if (part.type === "tool-result") return part.name ? `Tool result: ${part.name}` : "Tool result"
+  if (part.type === "file") return "File"
+  if (part.type === "patch") return "Patch"
+  return "Details"
+}
+
+function partLabel(part: SessionDetailPart): string {
+  const heading = partHeading(part)
+  return part.status ? `${heading} (${part.status})` : heading
+}
+
+function partIcon(part: SessionDetailPart) {
+  if (part.type === "reasoning") return Brain
+  if (part.type === "tool-call" || part.type === "tool-result") return Wrench
+  return FileText
+}
+
+function isTextPart(part: SessionDetailPart): boolean {
+  return part.type === "text" || part.type === "reasoning"
+}
+
+function isVisibleTextPart(part: SessionDetailPart): boolean {
+  return isTextPart(part) && Boolean(part.text.trim())
+}
+
+function isCallPart(part: SessionDetailPart): boolean {
+  return !isTextPart(part)
+}
+
+function formatReasoningText(text: string): string {
+  return text.replace(/\*\*\*\*(?=\S)/g, "**\n**")
+}
+
+async function loadSessionDetail(append = false): Promise<void> {
+  const session = selectedSession.value
+  if (!session || (append && (!detailHasMore.value || detailLoading.value))) return
+
+  const requestId = ++latestDetailRequest
+  const sessionKey = getRowKey(session)
+  detailLoading.value = true
+  detailErrorMessage.value = ""
+  try {
+    const page = await props.client.getSessionDetail(session.collectorId, {
+      agent: session.agent,
+      id: session.id,
+      limit: 20,
+      cursor: append ? detailCursor.value : undefined,
+    })
+    if (
+      requestId !== latestDetailRequest ||
+      !selectedSession.value ||
+      getRowKey(selectedSession.value) !== sessionKey
+    ) {
+      return
+    }
+    detailMessages.value = append
+      ? [...detailMessages.value, ...page.items]
+      : page.items
+    detailCursor.value = page.nextCursor
+    detailHasMore.value = page.hasMore
+  } catch (error) {
+    if (requestId !== latestDetailRequest) return
+    detailErrorMessage.value =
+      error instanceof Error ? error.message : "Unable to load session details."
+  } finally {
+    if (requestId === latestDetailRequest) detailLoading.value = false
+  }
+
+  if (requestId === latestDetailRequest && detailHasMore.value) {
+    await nextTick()
+    const region = detailMessageRegion.value
+    if (
+      region &&
+      region.scrollHeight - region.clientHeight - region.scrollTop <=
+        loadMoreThreshold
+    ) {
+      void loadSessionDetail(true)
+    }
+  }
+}
+
+function handleDetailScroll(event: Event): void {
+  const region = event.currentTarget as HTMLElement
+  const distanceToBottom =
+    region.scrollHeight - region.clientHeight - region.scrollTop
+  if (distanceToBottom <= loadMoreThreshold) {
+    void loadSessionDetail(true)
+  }
+}
+
+function openSessionDetail(session: SessionSummary): void {
+  latestDetailRequest += 1
+  cancelTitleEdit()
+  selectedSession.value = session
+  detailMessages.value = []
+  detailCursor.value = undefined
+  detailHasMore.value = false
+  detailErrorMessage.value = ""
+  void loadSessionDetail(false)
+}
+
+function clearSessionDetail(): void {
+  latestDetailRequest += 1
+  selectedSession.value = undefined
+  detailMessages.value = []
+  detailCursor.value = undefined
+  detailHasMore.value = false
+  detailLoading.value = false
+  detailErrorMessage.value = ""
+}
+
+function closeSessionDetail(): void {
+  cancelTitleEdit()
+  clearSessionDetail()
 }
 
 async function startTitleEdit(session: SessionSummary): Promise<void> {
   editingSessionKey.value = getRowKey(session)
   editingTitle.value = session.title
   await nextTick()
-  const input = tableRegion.value?.querySelector<HTMLInputElement>(
+  const input = detailRegion.value?.querySelector<HTMLInputElement>(
     ".session-title-editor input",
   )
   input?.focus()
@@ -158,6 +295,12 @@ async function saveTitle(session: SessionSummary): Promise<void> {
       (item) => getRowKey(item) === getRowKey(updated),
     )
     if (index >= 0) sessions.value[index] = updated
+    if (
+      selectedSession.value &&
+      getRowKey(selectedSession.value) === getRowKey(updated)
+    ) {
+      selectedSession.value = updated
+    }
     editingSessionKey.value = ""
     editingTitle.value = ""
     ElMessage.success("Session title updated.")
@@ -279,6 +422,7 @@ async function loadCollectors(): Promise<void> {
 }
 
 function resetAndLoadSessions(): void {
+  closeSessionDetail()
   nextCursor.value = undefined
   hasMore.value = false
   void loadSessions(false)
@@ -371,7 +515,172 @@ onActivated(() => {
 </script>
 
 <template>
-  <section class="app-view session-view">
+  <section
+    v-if="selectedSession"
+    ref="detailRegion"
+    class="app-view session-detail-view"
+  >
+    <page-toolbar
+      class="session-detail-toolbar"
+      :title="selectedSession.title || 'Untitled session'"
+    >
+      <template #leading>
+        <el-tooltip content="Back to sessions" placement="bottom">
+          <el-button
+            class="refresh-button"
+            circle
+            aria-label="Back to sessions"
+            @click="closeSessionDetail"
+          >
+            <arrow-left :size="17" :stroke-width="1.8" />
+          </el-button>
+        </el-tooltip>
+      </template>
+      <template #metadata>
+        <span class="session-detail-directory" :title="selectedSession.directory">
+          {{ selectedSession.directory }}
+        </span>
+      </template>
+      <template #actions>
+        <div
+          v-if="editingSessionKey === getRowKey(selectedSession)"
+          class="session-title-editor session-detail-title-editor"
+        >
+          <el-input
+            v-model="editingTitle"
+            maxlength="4096"
+            aria-label="Session title"
+            @keyup.enter="saveTitle(selectedSession)"
+            @keyup.esc="cancelTitleEdit"
+          />
+          <el-tooltip content="Save title" placement="top">
+            <el-button
+              class="session-title-action"
+              text
+              circle
+              :loading="savingSessionKey === getRowKey(selectedSession)"
+              aria-label="Save session title"
+              @click="saveTitle(selectedSession)"
+            >
+              <check :size="16" />
+            </el-button>
+          </el-tooltip>
+          <el-tooltip content="Cancel" placement="top">
+            <el-button
+              class="session-title-action"
+              text
+              circle
+              :disabled="savingSessionKey === getRowKey(selectedSession)"
+              aria-label="Cancel session title edit"
+              @click="cancelTitleEdit"
+            >
+              <x :size="16" />
+            </el-button>
+          </el-tooltip>
+        </div>
+        <el-tooltip v-else content="Edit title" placement="bottom">
+          <el-button
+            class="refresh-button"
+            circle
+            aria-label="Edit session title"
+            @click="startTitleEdit(selectedSession)"
+          >
+            <pencil :size="16" />
+          </el-button>
+        </el-tooltip>
+      </template>
+    </page-toolbar>
+
+    <section class="session-detail-body" aria-label="Session details">
+      <el-alert
+        v-if="detailErrorMessage"
+        :title="detailErrorMessage"
+        type="error"
+        show-icon
+        :closable="false"
+      >
+        <template #default>
+          <el-button size="small" @click="loadSessionDetail(false)">Retry</el-button>
+        </template>
+      </el-alert>
+
+      <div
+        ref="detailMessageRegion"
+        v-loading="detailLoading && detailMessages.length === 0"
+        class="session-message-region"
+        @scroll="handleDetailScroll"
+      >
+        <el-empty
+          v-if="
+            !detailLoading &&
+            !detailErrorMessage &&
+            detailMessages.length === 0
+          "
+          :image-size="56"
+          description="No message details found"
+        />
+
+        <article
+          v-for="message in detailMessages"
+          :key="message.id"
+          class="session-message"
+          :class="`is-${message.role}`"
+        >
+          <header class="session-message-header">
+            <strong>{{ message.role }}</strong>
+            <time>{{ formatExactTime(message.createdAt) }}</time>
+          </header>
+          <div class="session-message-content">
+            <template
+              v-for="part in message.parts.filter(isVisibleTextPart)"
+              :key="part.id"
+            >
+              <pre
+                v-if="part.type === 'text'"
+                class="session-message-text"
+              >{{ part.text }}</pre>
+              <div v-else class="session-reasoning">
+                <brain :size="16" aria-hidden="true" />
+                <pre>{{ formatReasoningText(part.text) }}</pre>
+              </div>
+            </template>
+            <div
+              v-if="message.parts.some(isCallPart)"
+              class="session-message-call-row"
+            >
+              <template
+                v-for="part in message.parts.filter(isCallPart)"
+                :key="part.id"
+              >
+                <details
+                  class="session-message-detail session-message-call-detail"
+                  :data-status="part.status"
+                >
+                  <summary
+                    :aria-label="partLabel(part)"
+                    :title="partLabel(part)"
+                  >
+                    <component :is="partIcon(part)" :size="15" />
+                  </summary>
+                  <pre>{{ part.text }}</pre>
+                </details>
+              </template>
+            </div>
+          </div>
+        </article>
+
+        <div
+          v-if="detailLoading && detailMessages.length > 0"
+          class="session-detail-pagination"
+          aria-label="Loading more session messages"
+        >
+          <loader-circle :size="18" class="session-detail-loading-icon" />
+        </div>
+      </div>
+    </section>
+  </section>
+
+  <section v-else class="app-view session-view">
     <page-toolbar :title="projectName ?? 'Unassigned'" :summary="resultSummary">
       <template #actions>
         <el-tooltip content="Refresh sessions" placement="bottom">
@@ -486,62 +795,13 @@ onActivated(() => {
         table-layout="fixed"
         scrollbar-always-on
         @scroll="handleTableScroll"
+        @row-click="openSessionDetail"
       >
         <el-table-column label="Title" min-width="290">
           <template #default="{ row }">
-            <div
-              v-if="editingSessionKey === getRowKey(asSession(row))"
-              class="session-title-editor"
-            >
-              <el-input
-                v-model="editingTitle"
-                size="small"
-                maxlength="4096"
-                aria-label="Session title"
-                @keyup.enter="saveTitle(asSession(row))"
-                @keyup.esc="cancelTitleEdit"
-              />
-              <el-tooltip content="Save title" placement="top">
-                <el-button
-                  class="session-title-action"
-                  text
-                  circle
-                  :loading="savingSessionKey === getRowKey(asSession(row))"
-                  aria-label="Save session title"
-                  @click.stop="saveTitle(asSession(row))"
-                >
-                  <check :size="15" />
-                </el-button>
-              </el-tooltip>
-              <el-tooltip content="Cancel" placement="top">
-                <el-button
-                  class="session-title-action"
-                  text
-                  circle
-                  :disabled="savingSessionKey === getRowKey(asSession(row))"
-                  aria-label="Cancel session title edit"
-                  @click.stop="cancelTitleEdit"
-                >
-                  <x :size="15" />
-                </el-button>
-              </el-tooltip>
-            </div>
-            <div v-else class="session-title-display">
-              <span class="session-title" :title="row.title">{{
-                row.title || "Untitled session"
-              }}</span>
-              <el-tooltip content="Edit title" placement="top">
-                <el-button
-                  class="session-title-action session-title-edit"
-                  text
-                  circle
-                  aria-label="Edit session title"
-                  @click.stop="startTitleEdit(asSession(row))"
-                >
-                  <pencil :size="14" />
-                </el-button>
-              </el-tooltip>
-            </div>
+            <span class="session-title" :title="row.title">
+              {{ row.title || "Untitled session" }}
+            </span>
           </template>
         </el-table-column>
 
@@ -570,9 +830,9 @@ onActivated(() => {
               :content="formatExactTime(row.updatedAt)"
               placement="top"
             >
-              <span class="updated-time">{{
-                formatRelativeTime(row.updatedAt)
-              }}</span>
+              <span class="updated-time">
+                {{ formatRelativeTime(row.updatedAt) }}
+              </span>
             </el-tooltip>
           </template>
         </el-table-column>

@@ -11,12 +11,14 @@ import type {
   CreateCollectorInput,
   CreateCollectorResult,
   InitializationStatus,
+  GetSessionDetailRequest,
   ManagedCollectorInfo,
   CreateProjectInput,
   ProjectInfo,
   RenameCollectorInput,
   RuntimeInfo,
   SessionBatch,
+  SessionDetailPage,
   SessionSummary,
 } from "@nexume/contracts"
 
@@ -109,6 +111,26 @@ export function createHttpSessionClient(
       }
 
       return (await response.json()) as SessionBatch
+    },
+
+    async getSessionDetail(collectorId, input: GetSessionDetailRequest) {
+      const path = [collectorId, input.agent, input.id]
+        .map(encodeURIComponent)
+        .join("/")
+      const url = new URL(`/api/sessions/${path}`, window.location.origin)
+      url.searchParams.set("limit", String(input.limit))
+      if (input.cursor) url.searchParams.set("cursor", input.cursor)
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      if (response.status === 401) {
+        onUnauthorized()
+        throw new Error("The access token is invalid.")
+      }
+      if (!response.ok) {
+        throw await responseError(response, "Unable to load session details.")
+      }
+      return (await response.json()) as SessionDetailPage
     },
 
     async updateSessionTitle(collectorId, input) {

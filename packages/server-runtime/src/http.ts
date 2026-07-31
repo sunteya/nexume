@@ -4,6 +4,7 @@ import { resolve, sep } from "node:path"
 import {
   assertCollectorName,
   assertCreateCollectorInput,
+  assertGetSessionDetailRequest,
   assertListSessionsParams,
   assertProjectInput,
   assertUpdateSessionTitleRequest,
@@ -11,12 +12,15 @@ import {
   type CreateCollectorInput,
   type CreateCollectorResult,
   type CreateProjectInput,
+  type GetSessionDetailRequest,
   type InitializationStatus,
   type ListSessionsParams,
   type ManagedCollectorInfo,
   type ProjectInfo,
   type RuntimeInfo,
   type SessionBatchSize,
+  type SessionDetailPage,
+  type SessionDetailPageSize,
   type SessionStatus,
   type SessionSummary,
   type UpdateSessionTitleRequest,
@@ -58,6 +62,10 @@ export interface RequestHandlerOptions {
     listDirectories(): AvailableSessionDirectory[]
   }
   sessions?: {
+    getDetail(
+      collectorId: string,
+      request: GetSessionDetailRequest,
+    ): Promise<SessionDetailPage>
     updateTitle(
       collectorId: string,
       request: UpdateSessionTitleRequest,
@@ -322,6 +330,43 @@ export function createRequestHandler(options: RequestHandlerOptions) {
       const sessionMatch = url.pathname.match(
         /^\/api\/sessions\/([^/]+)\/([^/]+)\/([^/]+)$/,
       )
+      if (request.method === "GET" && sessionMatch && options.sessions) {
+        let collectorId: string
+        let detailRequest: GetSessionDetailRequest
+        try {
+          collectorId = decodeURIComponent(sessionMatch[1]!)
+          const candidate = {
+            agent: decodeURIComponent(sessionMatch[2]!),
+            id: decodeURIComponent(sessionMatch[3]!),
+            limit: Number(url.searchParams.get("limit") ?? "20") as SessionDetailPageSize,
+            cursor: url.searchParams.get("cursor") ?? undefined,
+          }
+          assertGetSessionDetailRequest(candidate)
+          detailRequest = candidate
+        } catch {
+          return errorResponse(
+            "invalid_request",
+            "The session detail request is invalid.",
+            400,
+          )
+        }
+
+        try {
+          return sensitiveJson(
+            await options.sessions.getDetail(collectorId, detailRequest),
+          )
+        } catch (error) {
+          if (error instanceof SessionManagementError) {
+            return errorResponse(error.code, error.message, error.status)
+          }
+          options.onError?.(error)
+          return errorResponse(
+            "internal_error",
+            "Unable to load the session detail.",
+            500,
+          )
+        }
+      }
       if (request.method === "PATCH" && sessionMatch && options.sessions) {
         let collectorId: string
         let update: UpdateSessionTitleRequest

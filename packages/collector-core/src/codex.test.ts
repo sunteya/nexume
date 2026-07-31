@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Database } from "bun:sqlite"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { homedir, tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 
@@ -24,6 +24,7 @@ function createDatabase(schema = true): string {
     database.exec(`
       CREATE TABLE threads (
         id TEXT PRIMARY KEY,
+        rollout_path TEXT NOT NULL DEFAULT '',
         title TEXT NOT NULL,
         cwd TEXT NOT NULL,
         created_at INTEGER NOT NULL,
@@ -98,6 +99,43 @@ function createDatabase(schema = true): string {
       SET archived = 1, archived_at = 40
       WHERE id = 'atlas-thread';
     `)
+    const rolloutPath = join(root, "rollout.jsonl")
+    writeFileSync(
+      rolloutPath,
+      [
+        JSON.stringify({
+          timestamp: "1970-01-01T00:00:01.000Z",
+          type: "response_item",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: "Inspect this session" }],
+          },
+        }),
+        JSON.stringify({
+          timestamp: "1970-01-01T00:00:02.000Z",
+          type: "response_item",
+          payload: {
+            type: "function_call",
+            name: "read_file",
+            call_id: "call-1",
+            arguments: { path: "README.md" },
+          },
+        }),
+        JSON.stringify({
+          timestamp: "1970-01-01T00:00:03.000Z",
+          type: "response_item",
+          payload: {
+            type: "function_call_output",
+            call_id: "call-1",
+            output: "contents",
+          },
+        }),
+      ].join("\n"),
+    )
+    database
+      .query("UPDATE threads SET rollout_path = ? WHERE id = 'thread-01'")
+      .run(rolloutPath)
   }
 
   database.close()
@@ -215,6 +253,24 @@ describe("CodexCollector", () => {
         expectedUpdatedAt: 1_000,
       }),
     ).toThrow(SessionTitleConflictError)
+  })
+
+  test("reads normalized rollout messages and tools", () => {
+    const collector = new CodexCollector({ databasePath: createDatabase() })
+    const result = collector.readSessionDetail({ id: "thread-01", limit: 20 })
+
+    expect(result.items).toHaveLength(3)
+    expect(result.items[0]).toMatchObject({
+      role: "user",
+      parts: [{ type: "text", text: "Inspect this session" }],
+    })
+    expect(result.items[1]).toMatchObject({
+      parts: [{ type: "tool-call", name: "read_file", callId: "call-1" }],
+    })
+    expect(result.items[2]).toMatchObject({
+      role: "tool",
+      parts: [{ type: "tool-result", text: "contents" }],
+    })
   })
 
   test("uses CODEX_HOME for the default database path", () => {

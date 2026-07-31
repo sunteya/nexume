@@ -1,15 +1,23 @@
 import {
+  assertCollectedSessionDetailPage,
   assertCollectedSessionSummary,
+  type CollectedSessionDetailPage,
+  type GetSessionDetailRequest,
+  type GetSessionDetailResponse,
+  type SessionDetailPage,
   type SessionSummary,
   type UpdateSessionTitleRequest,
   type UpdateSessionTitleResponse,
 } from "@nexume/contracts"
 import {
   CollectorUnavailableError,
+  SessionDetailCursorError,
+  SessionDetailNotFoundError,
   SessionTitleConflictError,
   SessionTitleNotFoundError,
   UnsupportedCollectorDataError,
   type CollectorDataSource,
+  type SessionDetailDataSource,
   type WritableCollectorDataSource,
 } from "@nexume/collector-core"
 import type {
@@ -37,6 +45,10 @@ export interface SessionManagementOptions {
     collectorId: string,
     request: UpdateSessionTitleRequest,
   ): Promise<UpdateSessionTitleResponse | undefined>
+  getRemoteDetail(
+    collectorId: string,
+    request: GetSessionDetailRequest,
+  ): Promise<GetSessionDetailResponse | undefined>
 }
 
 function writableSource(
@@ -44,6 +56,14 @@ function writableSource(
 ): WritableCollectorDataSource | undefined {
   return source && "updateSessionTitle" in source
     ? (source as WritableCollectorDataSource)
+    : undefined
+}
+
+function detailSource(
+  source: CollectorDataSource | undefined,
+): SessionDetailDataSource | undefined {
+  return source && "readSessionDetail" in source
+    ? (source as SessionDetailDataSource)
     : undefined
 }
 
@@ -95,6 +115,30 @@ function sourceError(error: unknown): SessionManagementError {
   )
 }
 
+function detailSourceError(error: unknown): SessionManagementError {
+  if (error instanceof SessionDetailCursorError) {
+    return new SessionManagementError("invalid_cursor", error.message, 400)
+  }
+  if (error instanceof SessionDetailNotFoundError) {
+    return new SessionManagementError("session_not_found", error.message, 404)
+  }
+  if (
+    error instanceof CollectorUnavailableError ||
+    error instanceof UnsupportedCollectorDataError
+  ) {
+    return new SessionManagementError(
+      "collector_unavailable",
+      error.message,
+      503,
+    )
+  }
+  return new SessionManagementError(
+    "session_detail_failed",
+    error instanceof Error ? error.message : String(error),
+    500,
+  )
+}
+
 function remoteError(
   response: Extract<UpdateSessionTitleResponse, { ok: false }>,
 ): SessionManagementError {
@@ -120,6 +164,40 @@ function remoteError(
       response.error.code,
       response.error.message,
       503,
+    )
+  }
+  return new SessionManagementError(
+    response.error.code,
+    response.error.message,
+    502,
+  )
+}
+
+function remoteDetailError(
+  response: Extract<GetSessionDetailResponse, { ok: false }>,
+): SessionManagementError {
+  if (response.error.code === "session_not_found") {
+    return new SessionManagementError(
+      response.error.code,
+      response.error.message,
+      404,
+    )
+  }
+  if (
+    response.error.code === "collector_unavailable" ||
+    response.error.code === "unsupported_collector_data"
+  ) {
+    return new SessionManagementError(
+      response.error.code,
+      response.error.message,
+      503,
+    )
+  }
+  if (response.error.code === "invalid_cursor") {
+    return new SessionManagementError(
+      response.error.code,
+      response.error.message,
+      400,
     )
   }
   return new SessionManagementError(
@@ -237,5 +315,81 @@ export class SessionManagementService {
     const collectorName =
       this.options.collectors.get(collectorId)?.name ?? collectorId
     return toSummary(record, collectorName)
+  }
+
+  async getDetail(
+    collectorId: string,
+    request: GetSessionDetailRequest,
+  ): Promise<SessionDetailPage> {
+    const cached = this.options.sessions.get({
+      collectorId,
+      agent: request.agent,
+      sourceId: request.id,
+    })
+    if (!cached) {
+      throw new SessionManagementError(
+        "session_not_found",
+        "Session 不存在。",
+        404,
+      )
+    }
+
+    let page: CollectedSessionDetailPage | undefined
+    if (collectorId === "local") {
+      const source = detailSource(this.localSources.get(request.agent))
+      if (!source) {
+        throw new SessionManagementError(
+          "collector_unavailable",
+          "本地 Collector 不支持读取此 Session 详情。",
+          503,
+        )
+      }
+      try {
+        page = await source.readSessionDetail(request)
+      } catch (error) {
+        throw detailSourceError(error)
+      }
+    } else {
+      let response: GetSessionDetailResponse | undefined
+      try {
+        response = await this.options.getRemoteDetail(collectorId, request)
+      } catch {
+        throw new SessionManagementError(
+          "collector_unavailable",
+          "Collector 未能及时响应 Session 详情请求。",
+          503,
+        )
+      }
+      if (!response) {
+        throw new SessionManagementError(
+          "collector_offline",
+          "Collector 当前离线，无法读取 Session 详情。",
+          503,
+        )
+      }
+      if (!response.ok) throw remoteDetailError(response)
+      page = response.data
+    }
+
+    try {
+      assertCollectedSessionDetailPage(page, request.agent, request.id)
+    } catch {
+      throw new SessionManagementError(
+        "invalid_collector_response",
+        "Collector 返回了无效的 Session 详情。",
+        502,
+      )
+    }
+    const collectorName =
+      this.options.collectors.get(collectorId)?.name ?? collectorId
+    return {
+      ...page,
+      session: {
+        ...page.session,
+        collectorId,
+        collectorName,
+        ...(cached.deletedAt === null ? {} : { deletedAt: cached.deletedAt }),
+      },
+    }
   }
 }

@@ -5,18 +5,28 @@ import { join } from "node:path"
 
 import type {
   CollectedSessionSummary,
+  SessionDetailMessage,
+  SessionDetailRole,
   SessionSyncCheckpoint,
 } from "@nexume/contracts"
 
 import type {
   SessionSourcePage,
   SessionSourcePageRequest,
+  SessionDetailDataSource,
+  SessionDetailSourceRequest,
   SessionTitleUpdateInput,
   WritableCollectorDataSource,
 } from "./source"
 import {
   createSessionTitleFingerprint,
+  detailOffset,
+  detailPage,
+  detailPart,
+  detailParts,
   SessionTitleConflictError,
+  SessionDetailCursorError,
+  SessionDetailNotFoundError,
   SessionTitleNotFoundError,
 } from "./source"
 
@@ -27,6 +37,19 @@ interface SessionRow {
   time_created: number
   time_updated: number
   time_archived: number | null
+}
+
+interface MessageRow {
+  id: string
+  time_created: number
+  data: string
+}
+
+interface PartRow {
+  id: string
+  message_id: string
+  time_created: number
+  data: string
 }
 
 interface OpenCodePosition {
@@ -112,7 +135,102 @@ function toSummary(row: SessionRow): CollectedSessionSummary {
   }
 }
 
-export class OpenCodeCollector implements WritableCollectorDataSource {
+function object(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : {}
+}
+
+function jsonObject(value: string): Record<string, unknown> {
+  try {
+    return object(JSON.parse(value))
+  } catch {
+    return {}
+  }
+}
+
+function role(value: unknown): SessionDetailRole {
+  return value === "user" || value === "assistant" || value === "system"
+    ? value
+    : value === "tool"
+      ? "tool"
+      : "unknown"
+}
+
+function partMessages(row: PartRow): ReturnType<typeof detailPart>[] {
+  const data = jsonObject(row.data)
+  const type = typeof data.type === "string" ? data.type : "unknown"
+  if (type === "text" || type === "reasoning") {
+    return [
+      detailPart({
+        id: row.id,
+        type,
+        text: data.text ?? "",
+      }),
+    ]
+  }
+  if (type === "tool") {
+    const state = object(data.state)
+    const result = []
+    if (state.input !== undefined) {
+      result.push(
+        detailPart({
+          id: `${row.id}:call`,
+          type: "tool-call",
+          name: typeof data.tool === "string" ? data.tool : undefined,
+          callId: typeof data.callID === "string" ? data.callID : undefined,
+          status: typeof state.status === "string" ? state.status : undefined,
+          text: state.input,
+        }),
+      )
+    }
+    if (state.output !== undefined || state.error !== undefined) {
+      result.push(
+        detailPart({
+          id: `${row.id}:result`,
+          type: "tool-result",
+          name: typeof data.tool === "string" ? data.tool : undefined,
+          callId: typeof data.callID === "string" ? data.callID : undefined,
+          status: typeof state.status === "string" ? state.status : undefined,
+          text: state.output ?? state.error,
+        }),
+      )
+    }
+    return result.length > 0
+      ? result
+      : [detailPart({ id: row.id, type: "unknown", text: data })]
+  }
+  if (type === "file") {
+    return [
+      detailPart({
+        id: row.id,
+        type: "file",
+        text: data.filename ?? data.url ?? data.source ?? data,
+      }),
+    ]
+  }
+  if (type === "patch") {
+    return [detailPart({ id: row.id, type: "patch", text: data.files ?? data })]
+  }
+  return [detailPart({ id: row.id, type: "unknown", text: data })]
+}
+
+function toDetailMessage(
+  row: MessageRow,
+  parts: PartRow[],
+): SessionDetailMessage {
+  const data = jsonObject(row.data)
+  return {
+    id: row.id,
+    role: role(data.role),
+    createdAt: Number.isSafeInteger(row.time_created) ? row.time_created : 0,
+    parts: detailParts(parts.flatMap(partMessages)),
+  }
+}
+
+export class OpenCodeCollector
+  implements WritableCollectorDataSource, SessionDetailDataSource
+{
   readonly agent = "opencode"
   readonly checkpointFormat = "opencode/sqlite/v1"
   readonly databasePath: string
@@ -202,6 +320,83 @@ export class OpenCodeCollector implements WritableCollectorDataSource {
       ) {
         throw new UnsupportedCollectorDataError(
           "当前 OpenCode Session 数据格式暂不受支持。",
+        )
+      }
+      throw error
+    } finally {
+      database.close()
+    }
+  }
+
+  readSessionDetail(request: SessionDetailSourceRequest) {
+    if (!Number.isSafeInteger(request.limit) || request.limit <= 0) {
+      throw new Error("Session 详情批量无效。")
+    }
+    if (!this.available) {
+      throw new CollectorUnavailableError("未发现本机 OpenCode Session 数据。")
+    }
+
+    const database = new Database(this.databasePath, {
+      readonly: true,
+      strict: true,
+    })
+    try {
+      database.exec("PRAGMA busy_timeout = 5000; PRAGMA query_only = ON")
+      const session = database
+        .query<SessionRow, [string]>(
+          `SELECT id, title, directory, time_created, time_updated, time_archived
+           FROM session WHERE id = ? AND parent_id IS NULL`,
+        )
+        .get(request.id)
+      if (!session) throw new SessionDetailNotFoundError()
+
+      const offset = detailOffset(request.cursor)
+      const total =
+        database
+          .query<{ count: number }, [string]>(
+            "SELECT COUNT(*) AS count FROM message WHERE session_id = ?",
+          )
+          .get(request.id)?.count ?? 0
+      const messages = database
+        .query<MessageRow, [string, number, number]>(
+          `SELECT id, time_created, data FROM message
+           WHERE session_id = ? ORDER BY time_created ASC, id ASC
+           LIMIT ? OFFSET ?`,
+        )
+        .all(request.id, request.limit, offset)
+      const partsByMessage = new Map<string, PartRow[]>()
+      if (messages.length > 0) {
+        const placeholders = messages.map(() => "?").join(", ")
+        const parts = database
+          .query<PartRow, string[]>(
+            `SELECT id, message_id, time_created, data FROM part
+             WHERE message_id IN (${placeholders})
+             ORDER BY time_created ASC, id ASC`,
+          )
+          .all(...messages.map((item) => item.id))
+        for (const part of parts) {
+          const current = partsByMessage.get(part.message_id) ?? []
+          current.push(part)
+          partsByMessage.set(part.message_id, current)
+        }
+      }
+      return detailPage(
+        toSummary(session),
+        messages.map((message) =>
+          toDetailMessage(message, partsByMessage.get(message.id) ?? []),
+        ),
+        offset,
+        total,
+      )
+    } catch (error) {
+      if (error instanceof SessionDetailCursorError) throw error
+      const message = error instanceof Error ? error.message : String(error)
+      if (
+        message.includes("no such table") ||
+        message.includes("no such column")
+      ) {
+        throw new UnsupportedCollectorDataError(
+          "当前 OpenCode Session 详情格式暂不受支持。",
         )
       }
       throw error

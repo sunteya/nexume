@@ -6,8 +6,12 @@ export {
 export {
   SessionTitleConflictError,
   SessionTitleNotFoundError,
+  SessionDetailCursorError,
+  SessionDetailNotFoundError,
   createSessionTitleFingerprint,
   type CollectorDataSource,
+  type SessionDetailDataSource,
+  type SessionDetailSourceRequest,
   type SessionTitleUpdateInput,
   type SessionSourcePage,
   type SessionSourcePageRequest,

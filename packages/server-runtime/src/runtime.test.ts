@@ -6,6 +6,7 @@ import { join } from "node:path"
 import {
   CollectorConnection,
   SessionTitleConflictError,
+  type SessionDetailDataSource,
   type WritableCollectorDataSource,
 } from "@nexume/collector-core"
 import { openStorage } from "@nexume/storage"
@@ -92,7 +93,7 @@ describe("startServerRuntime", () => {
 
     let syncError: unknown
     let sessionTitle = "Remote Session"
-    const source: WritableCollectorDataSource = {
+    const source: WritableCollectorDataSource & SessionDetailDataSource = {
       agent: "opencode",
       checkpointFormat: "opencode/test/v1",
       available: true,
@@ -108,6 +109,25 @@ describe("startServerRuntime", () => {
           },
         ],
         checkpoint: { format: "opencode/test/v1", value: "complete" },
+        hasMore: false,
+      }),
+      readSessionDetail: () => ({
+        session: {
+          id: "session-1",
+          agent: "opencode",
+          title: sessionTitle,
+          directory: "/workspace/remote",
+          createdAt: 100,
+          updatedAt: 100,
+        },
+        items: [
+          {
+            id: "message-1",
+            role: "assistant",
+            createdAt: 100,
+            parts: [{ id: "part-1", type: "text", text: "Remote detail" }],
+          },
+        ],
         hasMore: false,
       }),
       updateSessionTitle(input) {
@@ -150,6 +170,22 @@ describe("startServerRuntime", () => {
       const state = storage.sessionSync.get(credential.collector.id, "opencode")
       return state?.activeRunId === null
     })
+
+    const detail = await fetch(
+      `${origin}/api/sessions/${credential.collector.id}/opencode/session-1?limit=20`,
+      { headers: authorization },
+    )
+    expect(detail.status).toBe(200)
+    expect(detail.headers.get("cache-control")).toBe("no-store")
+    expect(await detail.json()).toEqual(
+      expect.objectContaining({
+        items: [
+          expect.objectContaining({
+            parts: [expect.objectContaining({ text: "Remote detail" })],
+          }),
+        ],
+      }),
+    )
 
     const renamed = await fetch(
       `${origin}/api/sessions/${credential.collector.id}/opencode/session-1`,

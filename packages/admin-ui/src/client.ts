@@ -5,6 +5,7 @@ import type {
   CreateCollectorInput,
   CreateCollectorResult,
   InitializationStatus,
+  GetSessionDetailRequest,
   ListSessionsParams,
   ManagedCollectorInfo,
   CreateProjectInput,
@@ -12,6 +13,7 @@ import type {
   RenameCollectorInput,
   RuntimeInfo,
   SessionBatch,
+  SessionDetailPage,
   SessionSummary,
   UpdateSessionTitleRequest,
 } from "@nexume/contracts"
@@ -26,6 +28,10 @@ export interface InitializationClient {
 
 export interface SessionClient {
   listSessions(params: ListSessionsParams): Promise<SessionBatch>
+  getSessionDetail(
+    collectorId: string,
+    input: GetSessionDetailRequest,
+  ): Promise<SessionDetailPage>
   updateSessionTitle(
     collectorId: string,
     input: UpdateSessionTitleRequest,

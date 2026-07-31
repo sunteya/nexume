@@ -48,7 +48,7 @@ describe("CollectorManagementService", () => {
     })
     expect(created.token).toBeUndefined()
     expect(created.collector).toEqual(
-      expect.objectContaining({ id: "local", online: true }),
+      expect.objectContaining({ id: "local", online: true, syncing: false }),
     )
     expect(() =>
       service.create({ name: "Second", connectionType: "local" }),
@@ -123,5 +123,19 @@ describe("CollectorManagementService", () => {
     expect(() => service.sync("missing")).toThrow(
       "The collector does not exist",
     )
+  })
+
+  test("reports transient sync state and clears it on disconnect", async () => {
+    const { service } = await createManagement()
+    const created = service.create({
+      name: "Server Local",
+      connectionType: "local",
+    })
+
+    service.touched(created.collector.id, { available: true, syncing: true })
+    expect(service.list()[0]?.syncing).toBe(true)
+
+    service.disconnected(created.collector.id)
+    expect(service.list()[0]?.syncing).toBe(false)
   })
 })

@@ -97,6 +97,7 @@ export class CollectorConnection {
   readonly socket: CollectorSocket
   private heartbeat?: ReturnType<typeof setInterval>
   private readonly runner: CollectorSyncRunner
+  private syncing = false
 
   constructor(private readonly options: CollectorConnectionOptions) {
     const sourceAgents = new Set<string>()
@@ -116,7 +117,7 @@ export class CollectorConnection {
       token: options.token,
       metadata: options.metadata,
     }
-    this.socket = io(serverUrl, {
+    this.socket = io(`${serverUrl}/collector`, {
       path: "/socket.io",
       autoConnect: false,
       reconnection: true,
@@ -128,6 +129,10 @@ export class CollectorConnection {
       sources: options.sources,
       intervalMs: options.syncIntervalMs,
       onError: options.onSyncError,
+      onSyncStateChange: (syncing) => {
+        this.syncing = syncing
+        if (this.socket.connected) this.sendStatus()
+      },
       target: {
         begin: async (request) => {
           const response = (await this.socket
@@ -216,6 +221,7 @@ export class CollectorConnection {
   private sendStatus(): void {
     this.socket.emit("collector:status", {
       available: this.options.sources.some((source) => source.available),
+      syncing: this.syncing,
     })
   }
 

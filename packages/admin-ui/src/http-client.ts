@@ -13,6 +13,7 @@ import type {
   AiSettingsResponse,
   AiValidationResult,
   CollectorTokenResult,
+  DashboardToServerEvents,
   CompleteInitializationInput,
   CreateCollectorInput,
   CreateCollectorResult,
@@ -28,7 +29,10 @@ import type {
   SessionSummary,
   SessionTitleSuggestion,
   SessionTitleSuggestionEvent,
+  ServerSocketAuth,
+  ServerToDashboardEvents,
 } from "@nexume/contracts"
+import { io, type Socket } from "socket.io-client"
 
 interface ApiErrorBody {
   error?: {
@@ -459,6 +463,28 @@ export function createHttpCollectorClient(
         )
       }
       return (await response.json()) as CollectorTokenResult
+    },
+
+    subscribe(listener) {
+      const auth: ServerSocketAuth = { accessToken }
+      const socket: Socket<ServerToDashboardEvents, DashboardToServerEvents> = io(
+        "/server",
+        {
+          path: "/socket.io",
+          auth,
+        },
+      )
+      socket.on("collectors:updated", listener)
+      socket.on("connect_error", (error) => {
+        const code = (error as Error & { data?: { code?: string } }).data?.code
+        if (code !== "unauthorized") return
+        socket.disconnect()
+        onUnauthorized()
+      })
+      return () => {
+        socket.off("collectors:updated", listener)
+        socket.disconnect()
+      }
     },
   }
 }

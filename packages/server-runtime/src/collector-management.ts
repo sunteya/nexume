@@ -3,6 +3,7 @@ import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto"
 import {
   assertCollectorName,
   type CollectorRuntimeMetadata,
+  type CollectorStatus,
   type CreateCollectorInput,
   type CreateCollectorResult,
   type ManagedCollectorInfo,
@@ -26,6 +27,7 @@ export interface CollectorManagementOptions {
   core: ServerCore
   localMetadata: CollectorRuntimeMetadata
   onLocalCollectorChanged?: (enabled: boolean) => void
+  onChanged?: () => void
 }
 
 function collectorIdFromToken(token: string): string | undefined {
@@ -47,12 +49,14 @@ function tokensEqual(actual: string, expected: string): boolean {
 function managedInfo(
   record: CollectorRecord,
   online: ReturnType<ServerCore["listCollectors"]>[number] | undefined,
+  syncing: boolean,
 ): ManagedCollectorInfo {
   return {
     id: record.id,
     name: record.name,
     connectionType: record.connectionType,
     online: Boolean(online),
+    syncing: Boolean(online) && syncing,
     hostname: online?.hostname ?? record.hostname ?? undefined,
     version: online?.version ?? record.version ?? undefined,
     agents: [...(online?.agents ?? record.agents ?? [])],
@@ -67,6 +71,7 @@ export class CollectorManagementService {
   private localRegistration?: CollectorRegistration
   private disconnectRemote: (id: string) => void = () => {}
   private triggerSync: (id: string) => boolean = () => false
+  private readonly syncing = new Set<string>()
 
   constructor(private readonly options: CollectorManagementOptions) {}
 
@@ -103,6 +108,7 @@ export class CollectorManagementService {
       lastSeenAt: now,
     })
     this.options.onLocalCollectorChanged?.(true)
+    this.options.onChanged?.()
   }
 
   list(): ManagedCollectorInfo[] {
@@ -113,7 +119,9 @@ export class CollectorManagementService {
     )
     return this.options.collectors
       .list()
-      .map((record) => managedInfo(record, online.get(record.id)))
+      .map((record) =>
+        managedInfo(record, online.get(record.id), this.syncing.has(record.id)),
+      )
   }
 
   create(input: CreateCollectorInput): CreateCollectorResult {
@@ -171,7 +179,8 @@ export class CollectorManagementService {
       connectionType: "remote",
       token,
     })
-    return { collector: managedInfo(record, undefined), token }
+    this.options.onChanged?.()
+    return { collector: managedInfo(record, undefined, false), token }
   }
 
   rename(id: string, name: string): ManagedCollectorInfo {
@@ -179,6 +188,7 @@ export class CollectorManagementService {
     const record = this.options.collectors.updateName(id, name.trim())
     if (!record) throw this.notFound()
     this.options.core.renameCollector(id, record.name)
+    this.options.onChanged?.()
     return this.getManaged(id)
   }
 
@@ -187,6 +197,7 @@ export class CollectorManagementService {
     if (!record) throw this.notFound()
 
     this.options.collectors.delete(id)
+    this.syncing.delete(id)
     if (record.connectionType === "local") {
       this.localRegistration?.unregister()
       this.localRegistration = undefined
@@ -194,6 +205,7 @@ export class CollectorManagementService {
     } else {
       this.disconnectRemote(id)
     }
+    this.options.onChanged?.()
   }
 
   revealToken(id: string): string {
@@ -256,9 +268,10 @@ export class CollectorManagementService {
       connectedAt: now,
       lastSeenAt: now,
     })
+    this.options.onChanged?.()
   }
 
-  touched(id: string): void {
+  touched(id: string, status?: CollectorStatus): void {
     const record = this.options.collectors.get(id)
     if (!record) return
     this.options.collectors.updateRuntime(id, {
@@ -268,6 +281,20 @@ export class CollectorManagementService {
       connectedAt: record.connectedAt,
       lastSeenAt: Date.now(),
     })
+    if (status) {
+      this.updateSyncing(id, status.syncing)
+      this.options.onChanged?.()
+    }
+  }
+
+  disconnected(id: string): void {
+    this.syncing.delete(id)
+    this.options.onChanged?.()
+  }
+
+  setSyncing(id: string, syncing: boolean): void {
+    if (!this.options.collectors.get(id)) return
+    if (this.updateSyncing(id, syncing)) this.options.onChanged?.()
   }
 
   private getManaged(id: string): ManagedCollectorInfo {
@@ -276,7 +303,14 @@ export class CollectorManagementService {
     const online = this.options.core
       .listCollectors()
       .find((collector) => collector.id === id)
-    return managedInfo(record, online)
+    return managedInfo(record, online, this.syncing.has(id))
+  }
+
+  private updateSyncing(id: string, syncing: boolean): boolean {
+    if (syncing === this.syncing.has(id)) return false
+    if (syncing) this.syncing.add(id)
+    else this.syncing.delete(id)
+    return true
   }
 
   private notFound(): CollectorManagementError {

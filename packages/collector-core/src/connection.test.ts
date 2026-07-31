@@ -23,7 +23,9 @@ describe("CollectorConnection", () => {
       ],
     })
 
-    expect((connection.socket as unknown as { nsp: string }).nsp).toBe("/")
+    expect((connection.socket as unknown as { nsp: string }).nsp).toBe(
+      "/collector",
+    )
     expect(connection.socket.io.opts.path).toBe("/socket.io")
     expect(connection.socket.auth).toEqual({
       token: "collector-token",

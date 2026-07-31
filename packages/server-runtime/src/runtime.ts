@@ -28,6 +28,7 @@ export interface StartServerRuntimeOptions {
 }
 
 export function startServerRuntime(options: StartServerRuntimeOptions) {
+  let publishCollectors = () => {}
   const core = createServerCore({
     sessions: {
       list(query) {
@@ -52,6 +53,7 @@ export function startServerRuntime(options: StartServerRuntimeOptions) {
   const localSync = new CollectorSyncRunner({
     sources: options.localSources,
     onError: (_agent, error) => options.onError?.(error),
+    onSyncStateChange: (syncing) => collectors.setSyncing("local", syncing),
     target: {
       begin: async (request) => sessionSync.begin("local", request),
       commit: async (request) => sessionSync.commit("local", request),
@@ -65,6 +67,7 @@ export function startServerRuntime(options: StartServerRuntimeOptions) {
       if (enabled) localSync.start()
       else localSync.stop()
     },
+    onChanged: () => publishCollectors(),
   })
 
   if (options.storage.initialization.getStatus().initialized) {
@@ -74,13 +77,17 @@ export function startServerRuntime(options: StartServerRuntimeOptions) {
   const collectorSockets = createCollectorSocketServer({
     core,
     sessionSync,
+    accessToken: options.accessToken,
     authenticate: (token) => collectors.authenticate(token),
     getCollector: (id) => collectors.getRemote(id),
+    listCollectors: () => collectors.list(),
     onConnected: (id, metadata) => collectors.connected(id, metadata),
-    onTouched: (id) => collectors.touched(id),
+    onTouched: (id, status) => collectors.touched(id, status),
+    onDisconnected: (id) => collectors.disconnected(id),
     isInitialized: () => options.storage.initialization.getStatus().initialized,
     onError: options.onError,
   })
+  publishCollectors = () => collectorSockets.publishCollectors()
   const sessions = new SessionManagementService({
     sessions: options.storage.sessions,
     collectors: options.storage.collectors,

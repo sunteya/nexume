@@ -57,6 +57,7 @@ export interface CollectorClient {
   delete(id: string): Promise<void>
   sync(id: string): Promise<void>
   getToken(id: string): Promise<CollectorTokenResult>
+  subscribe(listener: (collectors: ManagedCollectorInfo[]) => void): () => void
 }
 
 export interface ProjectClient {

@@ -9,6 +9,7 @@ import {
 } from "@nexume/collector-core"
 import { createServerCore } from "@nexume/server-core"
 import { openStorage, type AppStorage } from "@nexume/storage"
+import { io } from "socket.io-client"
 
 import { createCollectorSocketServer } from "./collector-socket"
 import { SessionSyncService } from "./session-sync"
@@ -86,8 +87,10 @@ describe("Collector Socket.IO transport", () => {
     const transport = createCollectorSocketServer({
       core,
       sessionSync: new SessionSyncService(storage.sessionSync),
+      accessToken: "server-token",
       authenticate: () => ({ id: "blocked-test", name: "Blocked Test" }),
       getCollector: () => ({ id: "blocked-test", name: "Blocked Test" }),
+      listCollectors: () => [],
       isInitialized: () => false,
     })
     const handler = transport.engine.handler()
@@ -126,9 +129,11 @@ describe("Collector Socket.IO transport", () => {
     })
     const core = createCore(storage)
     let touches = 0
+    const syncStates: boolean[] = []
     const transport = createCollectorSocketServer({
       core,
       sessionSync: new SessionSyncService(storage.sessionSync),
+      accessToken: "server-token",
       authenticate: (token) =>
         token === "collector-token"
           ? { id: "remote-test", name: "Managed Name" }
@@ -137,8 +142,10 @@ describe("Collector Socket.IO transport", () => {
         id === "remote-test"
           ? { id: "remote-test", name: "Managed Name" }
           : undefined,
-      onTouched: () => {
+      listCollectors: () => [],
+      onTouched: (_id, status) => {
         touches += 1
+        if (status) syncStates.push(status.syncing)
       },
     })
     const handler = transport.engine.handler()
@@ -174,6 +181,9 @@ describe("Collector Socket.IO transport", () => {
       ),
     )
     expect(core.listCollectors()[0]?.name).toBe("Managed Name")
+    await waitFor(
+      () => syncStates.includes(true) && syncStates.at(-1) === false,
+    )
 
     await Bun.sleep(20)
     expect(transport.syncCollector("remote-test")).toBe(true)
@@ -197,8 +207,10 @@ describe("Collector Socket.IO transport", () => {
     const transport = createCollectorSocketServer({
       core,
       sessionSync: new SessionSyncService(storage.sessionSync),
+      accessToken: "server-token",
       authenticate: () => undefined,
       getCollector: () => undefined,
+      listCollectors: () => [],
     })
     const handler = transport.engine.handler()
     const server = Bun.serve({ port: 0, ...handler })
@@ -224,5 +236,67 @@ describe("Collector Socket.IO transport", () => {
     connection.connect()
     await waitFor(() => Boolean(connectionError))
     expect(core.listCollectors()).toHaveLength(0)
+  })
+
+  test("authenticates the server namespace and pushes Collector snapshots", async () => {
+    const storage = await createStorage()
+    const core = createCore(storage)
+    let collectors = [
+      {
+        id: "local",
+        name: "Local",
+        connectionType: "local" as const,
+        online: true,
+        syncing: false,
+        agents: ["opencode"],
+        createdAt: 100,
+        updatedAt: 100,
+      },
+    ]
+    const transport = createCollectorSocketServer({
+      core,
+      sessionSync: new SessionSyncService(storage.sessionSync),
+      accessToken: "server-token",
+      authenticate: () => undefined,
+      getCollector: () => undefined,
+      listCollectors: () => collectors,
+    })
+    const handler = transport.engine.handler()
+    const server = Bun.serve({ port: 0, ...handler })
+    cleanups.push(() => void server.stop(true))
+    cleanups.push(() => transport.close())
+
+    const updates: typeof collectors[] = []
+    const dashboard = io(`http://127.0.0.1:${server.port}/server`, {
+      path: "/socket.io",
+      auth: { accessToken: "server-token" },
+    })
+    cleanups.push(() => {
+      dashboard.disconnect()
+    })
+    dashboard.on("collectors:updated", (items) => updates.push(items))
+
+    await waitFor(() => updates.length === 1)
+    expect((dashboard as unknown as { nsp: string }).nsp).toBe("/server")
+    expect(updates[0]?.[0]?.syncing).toBe(false)
+
+    collectors = [{ ...collectors[0]!, syncing: true }]
+    transport.publishCollectors()
+    await waitFor(() => updates.length === 2)
+    expect(updates[1]?.[0]?.syncing).toBe(true)
+
+    let unauthorized = ""
+    const rejected = io(`http://127.0.0.1:${server.port}/server`, {
+      path: "/socket.io",
+      auth: { accessToken: "wrong-token" },
+    })
+    cleanups.push(() => {
+      rejected.disconnect()
+    })
+    rejected.on("connect_error", (error) => {
+      unauthorized = (error as Error & { data?: { code?: string } }).data?.code ?? ""
+    })
+    await waitFor(() => Boolean(unauthorized))
+    expect(unauthorized).toBe("unauthorized")
   })
 })

@@ -731,6 +731,24 @@ button:focus-visible,
   white-space: nowrap;
 }
 
+.collector-sync-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--nx-accent);
+  white-space: nowrap;
+}
+
+.collector-sync-state svg {
+  animation: collector-sync-spin 0.9s linear infinite;
+}
+
+@keyframes collector-sync-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .session-id,
 .token-value-input input {
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;

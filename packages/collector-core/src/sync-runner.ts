@@ -17,6 +17,7 @@ export interface CollectorSyncRunnerOptions {
   target: SessionSyncTarget
   intervalMs?: number
   onError?: (agent: string, error: unknown) => void
+  onSyncStateChange?: (syncing: boolean) => void
 }
 
 export class CollectorSyncRunner {
@@ -43,13 +44,16 @@ export class CollectorSyncRunner {
     await Promise.all(
       this.options.sources.map(async (source) => {
         if (!source.available || this.syncing.has(source.agent)) return
+        const wasIdle = this.syncing.size === 0
         this.syncing.add(source.agent)
+        if (wasIdle) this.options.onSyncStateChange?.(true)
         try {
           await this.syncSource(source)
         } catch (error) {
           this.options.onError?.(source.agent, error)
         } finally {
           this.syncing.delete(source.agent)
+          if (this.syncing.size === 0) this.options.onSyncStateChange?.(false)
         }
       }),
     )

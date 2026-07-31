@@ -71,6 +71,7 @@
         "@nexume/contracts": "workspace:*",
         "element-plus": "^2.14.3",
         "lucide-vue-next": "^1.0.0",
+        "socket.io-client": "^4.8.3",
         "vue": "^3.5.13",
       },
       "devDependencies": {
@@ -123,6 +124,7 @@
       },
       "devDependencies": {
         "@types/bun": "latest",
+        "socket.io-client": "^4.8.3",
         "typescript": "^5.7.2",
       },
     },

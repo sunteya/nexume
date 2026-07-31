@@ -1,13 +1,20 @@
+import { timingSafeEqual } from "node:crypto"
+
 import { Server as BunEngine } from "@socket.io/bun-engine"
 import {
   assertCollectorSocketAuth,
   type CollectorRuntimeMetadata,
+  type CollectorStatus,
   type CollectorSocketData,
   type CollectorToServerEvents,
+  type DashboardSocketData,
+  type DashboardToServerEvents,
   type GetSessionDetailRequest,
   type GetSessionDetailResponse,
   type InterServerEvents,
+  type ManagedCollectorInfo,
   type ServerToCollectorEvents,
+  type ServerToDashboardEvents,
   type UpdateSessionTitleRequest,
   type UpdateSessionTitleResponse,
 } from "@nexume/contracts"
@@ -15,17 +22,24 @@ import {
   CollectorRegistrationError,
   type ServerCore,
 } from "@nexume/server-core"
-import { Server as SocketIOServer, type Socket } from "socket.io"
+import {
+  Server as SocketIOServer,
+  type Namespace,
+  type Socket,
+} from "socket.io"
 
 import { SessionSyncService } from "./session-sync"
 
 export interface CollectorSocketServerOptions {
   core: ServerCore
   sessionSync: SessionSyncService
+  accessToken: string
   authenticate(token: string): { id: string; name: string } | undefined
   getCollector(id: string): { id: string; name: string } | undefined
+  listCollectors(): ManagedCollectorInfo[]
   onConnected?: (id: string, metadata: CollectorRuntimeMetadata) => void
-  onTouched?: (id: string) => void
+  onTouched?: (id: string, status?: CollectorStatus) => void
+  onDisconnected?: (id: string) => void
   isInitialized?: () => boolean
   onError?: (error: unknown) => void
 }
@@ -36,6 +50,30 @@ type CollectorServerSocket = Socket<
   InterServerEvents,
   CollectorSocketData
 >
+
+type CollectorNamespace = Namespace<
+  CollectorToServerEvents,
+  ServerToCollectorEvents,
+  InterServerEvents,
+  CollectorSocketData
+>
+
+type DashboardNamespace = Namespace<
+  DashboardToServerEvents,
+  ServerToDashboardEvents,
+  InterServerEvents,
+  DashboardSocketData
+>
+
+function tokensEqual(actual: string, expected: string): boolean {
+  const encoder = new TextEncoder()
+  const actualBytes = encoder.encode(actual)
+  const expectedBytes = encoder.encode(expected)
+  return (
+    actualBytes.length === expectedBytes.length &&
+    timingSafeEqual(actualBytes, expectedBytes)
+  )
+}
 
 function protocolError(error: unknown) {
   return {
@@ -51,16 +89,13 @@ export function createCollectorSocketServer(
   options: CollectorSocketServerOptions,
 ) {
   const engine = new BunEngine({ path: "/socket.io/" })
-  const io = new SocketIOServer<
-    CollectorToServerEvents,
-    ServerToCollectorEvents,
-    InterServerEvents,
-    CollectorSocketData
-  >()
+  const io = new SocketIOServer()
+  const collectorNamespace = io.of("/collector") as CollectorNamespace
+  const dashboardNamespace = io.of("/server") as DashboardNamespace
   const sockets = new Map<string, CollectorServerSocket>()
 
   io.bind(engine)
-  io.use((socket, next) => {
+  collectorNamespace.use((socket, next) => {
     try {
       if (options.isInitialized && !options.isInitialized()) {
         throw new Error("请先完成 Nexume 初始化。")
@@ -75,7 +110,7 @@ export function createCollectorSocketServer(
     }
   })
 
-  io.on("connection", (socket) => {
+  collectorNamespace.on("connection", (socket) => {
     const metadata = socket.handshake.auth.metadata as CollectorRuntimeMetadata
     const collector = options.getCollector(socket.data.collectorId)
     if (!collector) {
@@ -93,9 +128,9 @@ export function createCollectorSocketServer(
       sockets.set(collector.id, socket)
       options.onConnected?.(collector.id, metadata)
 
-      socket.on("collector:status", () => {
+      socket.on("collector:status", (status) => {
         registration.touch()
-        options.onTouched?.(collector.id)
+        options.onTouched?.(collector.id, status)
       })
       socket.on("sessions:sync:begin", (request, acknowledge) => {
         try {
@@ -124,10 +159,12 @@ export function createCollectorSocketServer(
         }
       })
       socket.on("disconnect", () => {
-        if (sockets.get(collector.id)?.id === socket.id) {
+        const isCurrent = sockets.get(collector.id)?.id === socket.id
+        if (isCurrent) {
           sockets.delete(collector.id)
         }
         registration.unregister()
+        if (isCurrent) options.onDisconnected?.(collector.id)
       })
     } catch (error) {
       if (!(error instanceof CollectorRegistrationError))
@@ -136,9 +173,31 @@ export function createCollectorSocketServer(
     }
   })
 
+  dashboardNamespace.use((socket, next) => {
+    const accessToken = socket.handshake.auth?.accessToken
+    if (
+      typeof accessToken !== "string" ||
+      !tokensEqual(accessToken, options.accessToken)
+    ) {
+      const error = new Error("Server access token 无效。") as Error & {
+        data?: { code: string }
+      }
+      error.data = { code: "unauthorized" }
+      next(error)
+      return
+    }
+    next()
+  })
+  dashboardNamespace.on("connection", (socket) => {
+    socket.emit("collectors:updated", options.listCollectors())
+  })
+
   return {
     engine,
     io,
+    publishCollectors() {
+      dashboardNamespace.emit("collectors:updated", options.listCollectors())
+    },
     disconnectCollector(id: string) {
       sockets.get(id)?.disconnect(true)
     },

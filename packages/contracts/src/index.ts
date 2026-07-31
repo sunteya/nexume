@@ -190,6 +190,7 @@ export interface ManagedCollectorInfo {
   name: string
   connectionType: CollectorConnectionType
   online: boolean
+  syncing: boolean
   hostname?: string
   version?: string
   agents: AgentId[]
@@ -271,7 +272,12 @@ export interface AiValidationResult {
 
 export interface CollectorStatus {
   available: boolean
+  syncing: boolean
   message?: string
+}
+
+export interface ServerSocketAuth {
+  accessToken: string
 }
 
 export interface InitializationStatus {
@@ -362,6 +368,14 @@ export interface InterServerEvents {}
 export interface CollectorSocketData {
   collectorId: string
 }
+
+export interface DashboardToServerEvents {}
+
+export interface ServerToDashboardEvents {
+  "collectors:updated": (collectors: ManagedCollectorInfo[]) => void
+}
+
+export interface DashboardSocketData {}
 
 export function assertAgentId(value: unknown): asserts value is AgentId {
   if (typeof value !== "string" || !/^[a-z][a-z0-9-]{0,63}$/.test(value)) {

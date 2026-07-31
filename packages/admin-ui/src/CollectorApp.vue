@@ -33,7 +33,14 @@ import {
   Trash2,
   X,
 } from "lucide-vue-next";
-import { computed, onActivated, onMounted, onUnmounted, ref } from "vue";
+import {
+  computed,
+  onActivated,
+  onDeactivated,
+  onMounted,
+  onUnmounted,
+  ref,
+} from "vue";
 
 import type {
   CollectorConnectionType,
@@ -73,11 +80,13 @@ const tokenDialog = ref(false);
 const tokenValue = ref("");
 const tokenTitle = ref("Collector token");
 const tokenLoading = ref(false);
-const syncingCollectorIds = ref(new Set<string>());
+const requestingSyncIds = ref(new Set<string>());
 const showTokenAfterCreate = ref(false);
 const compactActionsMedia = window.matchMedia("(max-width: 520px)");
 const compactActions = ref(compactActionsMedia.matches);
 let initialActivation = true;
+let unsubscribeFromCollectors: (() => void) | undefined;
+let collectorRevision = 0;
 
 const hasLocalCollector = computed(() =>
   collectors.value.some((collector) => collector.connectionType === "local"),
@@ -108,6 +117,10 @@ function asCollector(value: unknown): ManagedCollectorInfo {
 
 function formatAgents(collector: ManagedCollectorInfo): string {
   return collector.agents.length > 0 ? collector.agents.join(", ") : "Unknown";
+}
+
+function isCollectorSyncing(collector: ManagedCollectorInfo): boolean {
+  return collector.syncing || requestingSyncIds.value.has(collector.id);
 }
 
 function formatLastActivity(timestamp: number | undefined): string {
@@ -149,10 +162,12 @@ function formatExactTime(timestamp: number | undefined): string {
 
 async function loadCollectors(): Promise<void> {
   if (loading.value) return;
+  const revision = collectorRevision;
   loading.value = true;
   errorMessage.value = "";
   try {
-    collectors.value = await props.client.list();
+    const items = await props.client.list();
+    if (revision === collectorRevision) collectors.value = items;
   } catch (error) {
     errorMessage.value = errorText(error, "Unable to load collectors.");
   } finally {
@@ -274,17 +289,30 @@ async function showToken(collector: ManagedCollectorInfo): Promise<void> {
 }
 
 async function syncCollector(collector: ManagedCollectorInfo): Promise<void> {
-  syncingCollectorIds.value = new Set(syncingCollectorIds.value).add(collector.id);
+  requestingSyncIds.value = new Set(requestingSyncIds.value).add(collector.id);
   try {
     await props.client.sync(collector.id);
     ElMessage.success(`Sync requested for ${collector.name}.`);
   } catch (error) {
     ElMessage.error(errorText(error, "Unable to start collector sync."));
   } finally {
-    const next = new Set(syncingCollectorIds.value);
+    const next = new Set(requestingSyncIds.value);
     next.delete(collector.id);
-    syncingCollectorIds.value = next;
+    requestingSyncIds.value = next;
   }
+}
+
+function subscribeToCollectors(): void {
+  if (unsubscribeFromCollectors) return;
+  unsubscribeFromCollectors = props.client.subscribe((items) => {
+    collectorRevision += 1;
+    collectors.value = items;
+  });
+}
+
+function unsubscribeCollectors(): void {
+  unsubscribeFromCollectors?.();
+  unsubscribeFromCollectors = undefined;
 }
 
 async function copyToken(): Promise<void> {
@@ -306,6 +334,7 @@ function syncCompactActions(event: MediaQueryListEvent): void {
 
 onMounted(() => {
   compactActionsMedia.addEventListener("change", syncCompactActions);
+  subscribeToCollectors();
   void loadCollectors();
 });
 
@@ -314,11 +343,15 @@ onActivated(() => {
     initialActivation = false;
     return;
   }
+  subscribeToCollectors();
   void loadCollectors();
 });
 
+onDeactivated(unsubscribeCollectors);
+
 onUnmounted(() => {
   compactActionsMedia.removeEventListener("change", syncCompactActions);
+  unsubscribeCollectors();
 });
 </script>
 
@@ -428,7 +461,14 @@ onUnmounted(() => {
 
           <el-table-column label="Last active" width="152">
             <template #default="{ row }">
-              <el-tooltip :content="formatExactTime(row.lastSeenAt)" placement="top">
+              <span
+                v-if="isCollectorSyncing(asCollector(row))"
+                class="collector-sync-state"
+              >
+                <refresh-cw :size="13" :stroke-width="1.8" />
+                Syncing...
+              </span>
+              <el-tooltip v-else :content="formatExactTime(row.lastSeenAt)" placement="top">
                 <span class="updated-time">{{ formatLastActivity(row.lastSeenAt) }}</span>
               </el-tooltip>
             </template>
@@ -454,12 +494,12 @@ onUnmounted(() => {
                 <el-tooltip content="Sync now" placement="top">
                   <el-button
                     link
-                    :loading="syncingCollectorIds.has(row.id)"
+                    :loading="isCollectorSyncing(asCollector(row))"
                     aria-label="Sync now"
                     @click="syncCollector(asCollector(row))"
                   >
                     <refresh-cw
-                      v-if="!syncingCollectorIds.has(row.id)"
+                      v-if="!isCollectorSyncing(asCollector(row))"
                       :size="15"
                       :stroke-width="1.8"
                     />
@@ -511,10 +551,10 @@ onUnmounted(() => {
                     </el-dropdown-item>
                     <el-dropdown-item
                       :icon="RefreshCw"
-                      :disabled="syncingCollectorIds.has(row.id)"
+                      :disabled="isCollectorSyncing(asCollector(row))"
                       @click="syncCollector(asCollector(row))"
                     >
-                      {{ syncingCollectorIds.has(row.id) ? "Syncing..." : "Sync now" }}
+                      {{ isCollectorSyncing(asCollector(row)) ? "Syncing..." : "Sync now" }}
                     </el-dropdown-item>
                     <el-dropdown-item :icon="Pencil" @click="openRename(asCollector(row))">
                       Rename

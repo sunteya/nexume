@@ -19,6 +19,8 @@ import type {
   SessionBatch,
   SessionDetailPage,
   SessionSummary,
+  SessionTitleSuggestion,
+  SuggestSessionTitleRequest,
   UpdateSessionTitleRequest,
 } from "@nexume/contracts"
 
@@ -36,6 +38,11 @@ export interface SessionClient {
     collectorId: string,
     input: GetSessionDetailRequest,
   ): Promise<SessionDetailPage>
+  suggestSessionTitle(
+    collectorId: string,
+    input: SuggestSessionTitleRequest,
+    onStatus?: (message: string) => void,
+  ): Promise<SessionTitleSuggestion>
   updateSessionTitle(
     collectorId: string,
     input: UpdateSessionTitleRequest,

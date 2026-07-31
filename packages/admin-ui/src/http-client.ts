@@ -26,6 +26,8 @@ import type {
   SessionBatch,
   SessionDetailPage,
   SessionSummary,
+  SessionTitleSuggestion,
+  SessionTitleSuggestionEvent,
 } from "@nexume/contracts"
 
 interface ApiErrorBody {
@@ -199,6 +201,64 @@ export function createHttpSessionClient(
         throw await responseError(response, "Unable to load session details.")
       }
       return (await response.json()) as SessionDetailPage
+    },
+
+    async suggestSessionTitle(collectorId, input, onStatus) {
+      const path = [collectorId, input.agent, input.id]
+        .map(encodeURIComponent)
+        .join("/")
+      const response = await fetch(`/api/sessions/${path}/title-suggestion`, {
+        method: "POST",
+        headers: {
+          Accept: "application/x-ndjson",
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+      if (response.status === 401) {
+        onUnauthorized()
+        throw new Error("The access token is invalid.")
+      }
+      if (!response.ok) {
+        throw await responseError(
+          response,
+          "Unable to generate a session title.",
+        )
+      }
+      if (
+        !response.headers
+          .get("content-type")
+          ?.includes("application/x-ndjson")
+      ) {
+        return (await response.json()) as SessionTitleSuggestion
+      }
+      if (!response.body) {
+        throw new Error("The AI title response is empty.")
+      }
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ""
+      let suggestion: SessionTitleSuggestion | undefined
+
+      function consume(line: string): void {
+        if (!line.trim()) return
+        const event = JSON.parse(line) as SessionTitleSuggestionEvent
+        if (event.type === "status") onStatus?.(event.message)
+        else if (event.type === "result") suggestion = event.data
+        else throw new Error(event.error.message)
+      }
+
+      while (true) {
+        const { done, value } = await reader.read()
+        buffer += decoder.decode(value, { stream: !done })
+        const lines = buffer.split("\n")
+        buffer = lines.pop() ?? ""
+        for (const line of lines) consume(line)
+        if (done) break
+      }
+      consume(buffer)
+      if (!suggestion) throw new Error("The AI did not return a title.")
+      return suggestion
     },
 
     async updateSessionTitle(collectorId, input) {

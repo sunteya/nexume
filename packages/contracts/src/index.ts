@@ -38,6 +38,23 @@ export interface UpdateSessionTitleRequest {
   expectedUpdatedAt: number
 }
 
+export interface SuggestSessionTitleRequest {
+  agent: AgentId
+  id: string
+}
+
+export interface SessionTitleSuggestion {
+  title: string
+}
+
+export type SessionTitleSuggestionEvent =
+  | { type: "status"; message: string }
+  | { type: "result"; data: SessionTitleSuggestion }
+  | {
+      type: "error"
+      error: { code: string; message: string; status: number }
+    }
+
 export interface UpdateSessionTitleResult {
   session: CollectedSessionSummary
 }

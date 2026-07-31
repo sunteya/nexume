@@ -204,4 +204,121 @@ describe("AiSettingsService", () => {
       message: "Invalid API key: [redacted]",
     })
   })
+
+  test("generates a clean title from a small plain-text transcript", async () => {
+    const storage = await createStorage()
+    let received: Parameters<Models["completeSimple"]> | undefined
+    const service = new AiSettingsService(storage.settings, {
+      completeSimple: async (...args) => {
+        received = args
+        return {
+          ...successMessage(),
+          content: [{ type: "text", text: '标题："修复登录状态同步。"' }],
+        }
+      },
+    })
+    const model = service.getCatalog().providers[0]!.models[0]!
+    service.save({
+      provider: "openai",
+      model: model.id,
+      baseUrl: "https://proxy.example.com/v1",
+      apiKey: "secret",
+      thinkingLevel: null,
+    })
+    const statuses: string[] = []
+
+    const result = await service.suggestSessionTitle(
+      [
+        {
+          id: "message-1",
+          role: "user",
+          createdAt: 100,
+          parts: [
+            { id: "part-1", type: "text", text: "登录状态没有同步。" },
+            { id: "part-2", type: "reasoning", text: "private reasoning" },
+          ],
+        },
+        {
+          id: "message-2",
+          role: "assistant",
+          createdAt: 200,
+          parts: [
+            { id: "part-3", type: "text", text: "我会检查认证状态。" },
+            { id: "part-4", type: "tool-result", text: "large tool output" },
+          ],
+        },
+      ],
+      (message) => statuses.push(message),
+    )
+
+    expect(result).toEqual({ title: "修复登录状态同步" })
+    expect(statuses).toEqual([
+      "Prepared 2 conversation messages (37 characters).",
+      `Using openai / ${model.name}.`,
+      "Waiting for the model response.",
+    ])
+    expect(received![0].baseUrl).toBe("https://proxy.example.com/v1")
+    expect(received![1].systemPrompt).toContain("untrusted data")
+    expect(received![1].messages[0]?.content).toContain("登录状态没有同步")
+    expect(received![1].messages[0]?.content).toContain("我会检查认证状态")
+    expect(received![1].messages[0]?.content).not.toContain("private reasoning")
+    expect(received![1].messages[0]?.content).not.toContain("large tool output")
+    expect(received![2]).toMatchObject({
+      apiKey: "secret",
+      cacheRetention: "none",
+      maxRetries: 0,
+      maxTokens: 80,
+    })
+    expect(received![2]?.reasoning).toBeUndefined()
+  })
+
+  test("requires saved AI settings before generating a title", async () => {
+    const storage = await createStorage()
+    const service = new AiSettingsService(storage.settings)
+
+    await expect(
+      service.suggestSessionTitle([
+        {
+          id: "message-1",
+          role: "user",
+          createdAt: 100,
+          parts: [{ id: "part-1", type: "text", text: "Name this session" }],
+        },
+      ]),
+    ).rejects.toMatchObject({
+      code: "ai_not_configured",
+      status: 409,
+    })
+  })
+
+  test("maps a thrown title request timeout to a gateway timeout", async () => {
+    const storage = await createStorage()
+    const service = new AiSettingsService(storage.settings, {
+      completeSimple: async () => {
+        throw new DOMException("Timed out", "TimeoutError")
+      },
+    })
+    const model = service.getCatalog().providers[0]!.models[0]!
+    service.save({
+      provider: "openai",
+      model: model.id,
+      baseUrl: "https://api.openai.com/v1",
+      apiKey: "secret",
+      thinkingLevel: null,
+    })
+
+    await expect(
+      service.suggestSessionTitle([
+        {
+          id: "message-1",
+          role: "user",
+          createdAt: 100,
+          parts: [{ id: "part-1", type: "text", text: "Name this session" }],
+        },
+      ]),
+    ).rejects.toMatchObject({
+      code: "ai_title_timeout",
+      status: 504,
+    })
+  })
 })

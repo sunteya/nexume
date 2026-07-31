@@ -766,9 +766,97 @@ button:focus-visible,
   white-space: nowrap;
 }
 
-.session-detail-title-editor {
-  max-width: 420px;
+.session-title-dialog-form {
+  display: grid;
+  gap: 8px;
+}
+
+.session-title-dialog-form label {
+  color: var(--nx-text-soft);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.session-title-ai-log {
+  margin-top: 14px;
+  overflow: hidden;
+  border: 1px solid var(--nx-border);
+  border-radius: 5px;
+  background: var(--nx-surface-muted);
+}
+
+.session-title-ai-log > header {
+  display: flex;
+  height: 32px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--nx-border);
+  color: var(--nx-text-soft);
+  font-size: 12px;
+  font-weight: 680;
+}
+
+.session-title-ai-log ol {
+  max-height: 156px;
+  overflow-y: auto;
+  padding: 8px 10px;
   margin: 0;
+  list-style: none;
+}
+
+.session-title-ai-log li {
+  display: grid;
+  min-width: 0;
+  align-items: start;
+  grid-template-columns: 13px 56px minmax(0, 1fr);
+  gap: 7px;
+  padding: 3px 0;
+  color: var(--nx-text-muted);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.session-title-ai-log li > svg {
+  margin-top: 1px;
+}
+
+.session-title-ai-log li > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.session-title-ai-log li.is-active {
+  color: var(--nx-text);
+}
+
+.session-title-ai-log li.is-complete > svg {
+  color: var(--nx-accent);
+}
+
+.session-title-ai-log li.is-error {
+  color: var(--el-color-danger);
+}
+
+.session-title-log-spinner {
+  animation: session-detail-spin 0.9s linear infinite;
+}
+
+.session-title-dialog-actions,
+.session-title-dialog-confirmation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.session-title-dialog-actions {
+  justify-content: space-between;
+}
+
+.session-title-dialog-actions .el-button + .el-button,
+.session-title-dialog-confirmation .el-button + .el-button {
+  margin-left: 0;
 }
 
 .session-detail-body,
@@ -1272,6 +1360,20 @@ html.dark .session-detail-view .session-reasoning {
 }
 
 @media (max-width: 520px) {
+  .session-title-dialog-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .session-title-dialog-confirmation {
+    width: 100%;
+  }
+
+  .session-title-dialog-confirmation .el-button {
+    min-width: 0;
+    flex: 1 1 0;
+  }
+
   .brand-copy {
     display: none;
   }

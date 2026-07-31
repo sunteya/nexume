@@ -2,6 +2,7 @@
 import {
   ElAlert,
   ElButton,
+  ElDialog,
   ElEmpty,
   ElInput,
   ElMessage,
@@ -16,14 +17,16 @@ import {
 import {
   ArrowLeft,
   Brain,
-  Check,
+  CircleCheck,
+  CircleX,
   FileText,
   LoaderCircle,
   Pencil,
   RefreshCw,
   Search,
+  Sparkles,
+  Terminal,
   Wrench,
-  X,
 } from "lucide-vue-next"
 import {
   computed,
@@ -73,8 +76,23 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
 const relativeTimeFormatter = new Intl.RelativeTimeFormat("en", {
   numeric: "auto",
 })
+const logTimeFormatter = new Intl.DateTimeFormat("en-US", {
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+})
 const searchDebounceMs = 300
 const loadMoreThreshold = 120
+
+type TitleSuggestionLogState = "active" | "complete" | "error"
+
+interface TitleSuggestionLog {
+  id: number
+  time: string
+  message: string
+  state: TitleSuggestionLogState
+}
 
 const sessions = ref<SessionSummary[]>([])
 const collectors = ref<ManagedCollectorInfo[]>([])
@@ -91,7 +109,10 @@ const errorMessage = ref("")
 const collectorsErrorMessage = ref("")
 const editingSessionKey = ref("")
 const editingTitle = ref("")
+const titleDialogVisible = ref(false)
 const savingSessionKey = ref("")
+const suggestingTitleSessionKey = ref("")
+const titleSuggestionLogs = ref<TitleSuggestionLog[]>([])
 const selectedSession = ref<SessionSummary>()
 const detailMessages = ref<SessionDetailMessage[]>([])
 const detailCursor = ref<string>()
@@ -104,6 +125,8 @@ const detailRegion = ref<HTMLElement>()
 const detailMessageRegion = ref<HTMLElement>()
 let latestRequest = 0
 let latestDetailRequest = 0
+let latestTitleSuggestionRequest = 0
+let nextTitleSuggestionLogId = 0
 let mounted = false
 let initialActivation = true
 let searchTimer: ReturnType<typeof setTimeout> | undefined
@@ -254,11 +277,15 @@ function closeSessionDetail(): void {
 }
 
 async function startTitleEdit(session: SessionSummary): Promise<void> {
+  latestTitleSuggestionRequest += 1
+  suggestingTitleSessionKey.value = ""
+  titleSuggestionLogs.value = []
   editingSessionKey.value = getRowKey(session)
   editingTitle.value = session.title
+  titleDialogVisible.value = true
   await nextTick()
-  const input = detailRegion.value?.querySelector<HTMLInputElement>(
-    ".session-title-editor input",
+  const input = document.querySelector<HTMLInputElement>(
+    ".session-title-dialog input",
   )
   input?.focus()
   input?.select()
@@ -266,8 +293,89 @@ async function startTitleEdit(session: SessionSummary): Promise<void> {
 
 function cancelTitleEdit(): void {
   if (savingSessionKey.value) return
+  latestTitleSuggestionRequest += 1
+  suggestingTitleSessionKey.value = ""
+  titleSuggestionLogs.value = []
+  titleDialogVisible.value = false
   editingSessionKey.value = ""
   editingTitle.value = ""
+}
+
+function handleTitleDialogClosed(): void {
+  if (!savingSessionKey.value) cancelTitleEdit()
+}
+
+function appendTitleSuggestionLog(
+  message: string,
+  state: TitleSuggestionLogState = "active",
+): void {
+  titleSuggestionLogs.value = [
+    ...titleSuggestionLogs.value.map((entry) =>
+      entry.state === "active"
+        ? { ...entry, state: "complete" as const }
+        : entry,
+    ),
+    {
+      id: ++nextTitleSuggestionLogId,
+      time: logTimeFormatter.format(new Date()),
+      message,
+      state,
+    },
+  ]
+}
+
+async function suggestTitle(session: SessionSummary): Promise<void> {
+  const key = getRowKey(session)
+  if (suggestingTitleSessionKey.value) return
+
+  const requestId = ++latestTitleSuggestionRequest
+  suggestingTitleSessionKey.value = key
+  titleSuggestionLogs.value = []
+  appendTitleSuggestionLog("Starting title generation.")
+  try {
+    const suggestion = await props.client.suggestSessionTitle(
+      session.collectorId,
+      {
+        agent: session.agent,
+        id: session.id,
+      },
+      (message) => {
+        if (
+          requestId === latestTitleSuggestionRequest &&
+          editingSessionKey.value === key
+        ) {
+          appendTitleSuggestionLog(message)
+        }
+      },
+    )
+    if (
+      requestId !== latestTitleSuggestionRequest ||
+      editingSessionKey.value !== key
+    ) {
+      return
+    }
+    editingTitle.value = suggestion.title
+    appendTitleSuggestionLog("Title suggestion received.", "complete")
+    await nextTick()
+    document
+      .querySelector<HTMLInputElement>(".session-title-dialog input")
+      ?.focus()
+  } catch (error) {
+    if (requestId !== latestTitleSuggestionRequest) return
+    appendTitleSuggestionLog(
+      error instanceof Error ? error.message : "Title generation failed.",
+      "error",
+    )
+    ElMessage.error(
+      error instanceof Error
+        ? error.message
+        : "Unable to generate a session title.",
+    )
+  } finally {
+    if (requestId === latestTitleSuggestionRequest) {
+      suggestingTitleSessionKey.value = ""
+    }
+  }
 }
 
 async function saveTitle(session: SessionSummary): Promise<void> {
@@ -303,6 +411,7 @@ async function saveTitle(session: SessionSummary): Promise<void> {
     }
     editingSessionKey.value = ""
     editingTitle.value = ""
+    titleDialogVisible.value = false
     ElMessage.success("Session title updated.")
   } catch (error) {
     ElMessage.error(
@@ -312,6 +421,7 @@ async function saveTitle(session: SessionSummary): Promise<void> {
     )
     editingSessionKey.value = ""
     editingTitle.value = ""
+    titleDialogVisible.value = false
     await loadSessions(false)
   } finally {
     savingSessionKey.value = ""
@@ -542,43 +652,7 @@ onActivated(() => {
         </span>
       </template>
       <template #actions>
-        <div
-          v-if="editingSessionKey === getRowKey(selectedSession)"
-          class="session-title-editor session-detail-title-editor"
-        >
-          <el-input
-            v-model="editingTitle"
-            maxlength="4096"
-            aria-label="Session title"
-            @keyup.enter="saveTitle(selectedSession)"
-            @keyup.esc="cancelTitleEdit"
-          />
-          <el-tooltip content="Save title" placement="top">
-            <el-button
-              class="session-title-action"
-              text
-              circle
-              :loading="savingSessionKey === getRowKey(selectedSession)"
-              aria-label="Save session title"
-              @click="saveTitle(selectedSession)"
-            >
-              <check :size="16" />
-            </el-button>
-          </el-tooltip>
-          <el-tooltip content="Cancel" placement="top">
-            <el-button
-              class="session-title-action"
-              text
-              circle
-              :disabled="savingSessionKey === getRowKey(selectedSession)"
-              aria-label="Cancel session title edit"
-              @click="cancelTitleEdit"
-            >
-              <x :size="16" />
-            </el-button>
-          </el-tooltip>
-        </div>
-        <el-tooltip v-else content="Edit title" placement="bottom">
+        <el-tooltip content="Edit title" placement="bottom">
           <el-button
             class="refresh-button"
             circle
@@ -590,6 +664,94 @@ onActivated(() => {
         </el-tooltip>
       </template>
     </page-toolbar>
+
+    <el-dialog
+      v-model="titleDialogVisible"
+      class="session-title-dialog"
+      title="Edit session title"
+      width="min(92vw, 520px)"
+      :close-on-click-modal="!savingSessionKey"
+      :close-on-press-escape="!savingSessionKey"
+      :show-close="!savingSessionKey"
+      @closed="handleTitleDialogClosed"
+    >
+      <form
+        class="session-title-dialog-form"
+        @submit.prevent="saveTitle(selectedSession)"
+      >
+        <label for="session-title-input">Title</label>
+        <el-input
+          id="session-title-input"
+          v-model="editingTitle"
+          maxlength="4096"
+          :disabled="suggestingTitleSessionKey === getRowKey(selectedSession)"
+          autofocus
+        />
+      </form>
+      <section
+        v-if="titleSuggestionLogs.length > 0"
+        class="session-title-ai-log"
+        aria-label="AI activity"
+        aria-live="polite"
+      >
+        <header>
+          <terminal :size="14" aria-hidden="true" />
+          <span>AI activity</span>
+        </header>
+        <ol>
+          <li
+            v-for="entry in titleSuggestionLogs"
+            :key="entry.id"
+            :class="`is-${entry.state}`"
+          >
+            <loader-circle
+              v-if="entry.state === 'active'"
+              class="session-title-log-spinner"
+              :size="13"
+              aria-hidden="true"
+            />
+            <circle-check
+              v-else-if="entry.state === 'complete'"
+              :size="13"
+              aria-hidden="true"
+            />
+            <circle-x v-else :size="13" aria-hidden="true" />
+            <time>{{ entry.time }}</time>
+            <span>{{ entry.message }}</span>
+          </li>
+        </ol>
+      </section>
+      <template #footer>
+        <div class="session-title-dialog-actions">
+          <el-button
+            :icon="Sparkles"
+            :loading="suggestingTitleSessionKey === getRowKey(selectedSession)"
+            :disabled="Boolean(savingSessionKey)"
+            @click="suggestTitle(selectedSession)"
+          >
+            Generate with AI
+          </el-button>
+          <div class="session-title-dialog-confirmation">
+            <el-button
+              :disabled="Boolean(savingSessionKey)"
+              @click="cancelTitleEdit"
+            >
+              Cancel
+            </el-button>
+            <el-button
+              type="primary"
+              :loading="savingSessionKey === getRowKey(selectedSession)"
+              :disabled="
+                suggestingTitleSessionKey === getRowKey(selectedSession)
+              "
+              @click="saveTitle(selectedSession)"
+            >
+              Save
+            </el-button>
+          </div>
+        </div>
+      </template>
+    </el-dialog>
 
     <section class="session-detail-body" aria-label="Session details">
       <el-alert

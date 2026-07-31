@@ -28,6 +28,8 @@ import {
   type SessionDetailPageSize,
   type SessionStatus,
   type SessionSummary,
+  type SessionTitleSuggestion,
+  type SessionTitleSuggestionEvent,
   type UpdateSessionTitleRequest,
 } from "@nexume/contracts"
 import { InvalidSessionCursorError, type ServerCore } from "@nexume/server-core"
@@ -82,6 +84,10 @@ export interface RequestHandlerOptions {
     get(): AiSettings | undefined
     save(input: AiSettingsInput): AiSettings
     validate(input: AiSettingsInput): Promise<AiValidationResult>
+    suggestSessionTitle?(
+      messages: SessionDetailPage["items"],
+      onStatus?: (message: string) => void,
+    ): Promise<SessionTitleSuggestion>
   }
   getRuntimeInfo?: () => RuntimeInfo
   webRoot?: string
@@ -96,6 +102,32 @@ function sensitiveJson(data: unknown, status = 200): Response {
   return Response.json(data, {
     status,
     headers: { "Cache-Control": "no-store" },
+  })
+}
+
+function jsonLineStream(
+  run: (send: (event: SessionTitleSuggestionEvent) => void) => Promise<void>,
+): Response {
+  const encoder = new TextEncoder()
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      void (async () => {
+        try {
+          await run((event) => {
+            controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`))
+          })
+          controller.close()
+        } catch (error) {
+          controller.error(error)
+        }
+      })()
+    },
+  })
+  return new Response(body, {
+    headers: {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/x-ndjson; charset=utf-8",
+    },
   })
 }
 
@@ -407,6 +439,90 @@ export function createRequestHandler(options: RequestHandlerOptions) {
             "The Server encountered an internal error.",
             500,
           )
+        }
+      }
+
+      const titleSuggestionMatch = url.pathname.match(
+        /^\/api\/sessions\/([^/]+)\/([^/]+)\/([^/]+)\/title-suggestion$/,
+      )
+      if (request.method === "POST" && titleSuggestionMatch) {
+        if (!options.sessions || !options.aiSettings?.suggestSessionTitle) {
+          return errorResponse(
+            "not_found",
+            "The API endpoint does not exist.",
+            404,
+          )
+        }
+        const sessions = options.sessions
+        const aiSettings = options.aiSettings
+        const suggestSessionTitle = aiSettings.suggestSessionTitle!
+
+        let collectorId: string
+        let detailRequest: GetSessionDetailRequest
+        try {
+          collectorId = decodeURIComponent(titleSuggestionMatch[1]!)
+          const candidate = {
+            agent: decodeURIComponent(titleSuggestionMatch[2]!),
+            id: decodeURIComponent(titleSuggestionMatch[3]!),
+            limit: 20 as const,
+          }
+          assertGetSessionDetailRequest(candidate)
+          detailRequest = candidate
+        } catch {
+          return errorResponse(
+            "invalid_request",
+            "The session title suggestion request is invalid.",
+            400,
+          )
+        }
+
+        const suggest = async (
+          onStatus?: (message: string) => void,
+        ): Promise<SessionTitleSuggestion> => {
+          onStatus?.("Reading the first 20 session messages.")
+          const detail = await sessions.getDetail(
+            collectorId,
+            detailRequest,
+          )
+          return suggestSessionTitle.call(aiSettings, detail.items, onStatus)
+        }
+        const errorDetails = (error: unknown) => {
+          if (
+            error instanceof SessionManagementError ||
+            error instanceof AiSettingsError
+          ) {
+            return {
+              code: error.code,
+              message: error.message,
+              status: error.status,
+            }
+          }
+          options.onError?.(error)
+          return {
+            code: "internal_error",
+            message: "Unable to generate a session title.",
+            status: 500,
+          }
+        }
+
+        if (request.headers.get("accept")?.includes("application/x-ndjson")) {
+          return jsonLineStream(async (send) => {
+            try {
+              const suggestion = await suggest((message) =>
+                send({ type: "status", message }),
+              )
+              send({ type: "result", data: suggestion })
+            } catch (error) {
+              send({ type: "error", error: errorDetails(error) })
+            }
+          })
+        }
+
+        try {
+          return sensitiveJson(await suggest())
+        } catch (error) {
+          const details = errorDetails(error)
+          return errorResponse(details.code, details.message, details.status)
         }
       }
 

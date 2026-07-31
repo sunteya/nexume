@@ -291,6 +291,100 @@ describe("Server HTTP API", () => {
     expect(response.status).toBe(400)
   })
 
+  test("generates a Session title from server-loaded details", async () => {
+    let detailCall: unknown
+    let suggestedMessages: unknown
+    const detailItems = [
+      {
+        id: "message-1",
+        role: "user" as const,
+        createdAt: 100,
+        parts: [{ id: "part-1", type: "text" as const, text: "Fix login" }],
+      },
+    ]
+    const handler = createRequestHandler({
+      accessToken: token,
+      core: createCore(),
+      sessions: {
+        async getDetail(collectorId, request) {
+          detailCall = { collectorId, request }
+          return {
+            session: {
+              id: request.id,
+              agent: request.agent,
+              title: "Old title",
+              directory: "/workspace",
+              createdAt: 100,
+              updatedAt: 200,
+              collectorId,
+              collectorName: "Local",
+            },
+            items: detailItems,
+            hasMore: false,
+          }
+        },
+        async updateTitle() {
+          throw new Error("not implemented")
+        },
+      },
+      aiSettings: {
+        getCatalog: () => ({ providers: [] }),
+        get: () => undefined,
+        save: () => {
+          throw new Error("not implemented")
+        },
+        validate: async () => ({ latencyMs: 0 }),
+        suggestSessionTitle: async (messages, onStatus) => {
+          suggestedMessages = messages
+          onStatus?.("Prepared 1 conversation message.")
+          return { title: "Fix login state" }
+        },
+      },
+    })
+
+    const response = await handler(
+      new Request(
+        "http://localhost/api/sessions/local/opencode/session-1/title-suggestion",
+        { method: "POST", headers: authorization },
+      ),
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get("cache-control")).toBe("no-store")
+    expect(await response.json()).toEqual({ title: "Fix login state" })
+    expect(detailCall).toEqual({
+      collectorId: "local",
+      request: { agent: "opencode", id: "session-1", limit: 20 },
+    })
+    expect(suggestedMessages).toEqual(detailItems)
+
+    const streamed = await handler(
+      new Request(
+        "http://localhost/api/sessions/local/opencode/session-1/title-suggestion",
+        {
+          method: "POST",
+          headers: {
+            ...authorization,
+            Accept: "application/x-ndjson",
+          },
+        },
+      ),
+    )
+    expect(streamed.headers.get("content-type")).toContain(
+      "application/x-ndjson",
+    )
+    expect(
+      (await streamed.text())
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line)),
+    ).toEqual([
+      { type: "status", message: "Reading the first 20 session messages." },
+      { type: "status", message: "Prepared 1 conversation message." },
+      { type: "result", data: { title: "Fix login state" } },
+    ])
+  })
+
   test("passes an unassigned Session query and rejects conflicting scopes", async () => {
     let received: unknown
     const handler = createRequestHandler({

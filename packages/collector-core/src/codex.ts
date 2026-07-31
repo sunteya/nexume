@@ -307,9 +307,11 @@ export class CodexCollector
   readonly agent = "codex"
   readonly checkpointFormat = "codex/sqlite/v1"
   readonly databasePath: string
+  readonly dataPath: string
 
   constructor(options: CodexCollectorOptions = {}) {
     this.databasePath = options.databasePath ?? getCodexDatabasePath()
+    this.dataPath = this.databasePath
   }
 
   get available(): boolean {

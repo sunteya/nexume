@@ -234,9 +234,11 @@ export class OpenCodeCollector
   readonly agent = "opencode"
   readonly checkpointFormat = "opencode/sqlite/v1"
   readonly databasePath: string
+  readonly dataPath: string
 
   constructor(options: OpenCodeCollectorOptions = {}) {
     this.databasePath = options.databasePath ?? getOpenCodeDatabasePath()
+    this.dataPath = this.databasePath
   }
 
   get available(): boolean {

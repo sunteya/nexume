@@ -10,6 +10,7 @@ import Electrobun, {
 
 import {
   AlmaCollector,
+  ClaudeCodeCollector,
   CodexCollector,
   OpenCodeCollector,
 } from "@nexume/collector-core"
@@ -23,6 +24,9 @@ const sources = [
   new OpenCodeCollector({ databasePath: process.env.OPENCODE_DB_PATH }),
   new AlmaCollector({ databasePath: process.env.ALMA_DB_PATH }),
   new CodexCollector({ databasePath: process.env.CODEX_DB_PATH }),
+  new ClaudeCodeCollector({
+    projectsPath: process.env.CLAUDE_PROJECTS_PATH,
+  }),
 ]
 const accessToken = `nxa_${randomBytes(32).toString("base64url")}`
 

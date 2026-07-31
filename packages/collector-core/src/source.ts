@@ -167,6 +167,7 @@ export interface CollectorDataSource {
   readonly agent: AgentId
   readonly checkpointFormat: string
   readonly available: boolean
+  readonly dataPath?: string
   readSessionPage(
     request: SessionSourcePageRequest,
   ): SessionSourcePage | Promise<SessionSourcePage>

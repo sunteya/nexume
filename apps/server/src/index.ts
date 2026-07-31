@@ -3,6 +3,7 @@ import { hostname as getHostname } from "node:os"
 
 import {
   AlmaCollector,
+  ClaudeCodeCollector,
   CodexCollector,
   OpenCodeCollector,
 } from "@nexume/collector-core"
@@ -32,6 +33,9 @@ const sources = [
   new OpenCodeCollector({ databasePath: process.env.OPENCODE_DB_PATH }),
   new AlmaCollector({ databasePath: process.env.ALMA_DB_PATH }),
   new CodexCollector({ databasePath: process.env.CODEX_DB_PATH }),
+  new ClaudeCodeCollector({
+    projectsPath: process.env.CLAUDE_PROJECTS_PATH,
+  }),
 ]
 const runtime = startServerRuntime({
   accessToken,
@@ -59,8 +63,8 @@ console.log(`Data: ${storage.dataDir}`)
 for (const source of sources) {
   console.log(
     source.available
-      ? `${source.agent}: ${source.databasePath}`
-      : `${source.agent} 数据库暂不可用: ${source.databasePath}`,
+      ? `${source.agent}: ${source.dataPath}`
+      : `${source.agent} 数据暂不可用: ${source.dataPath}`,
   )
 }
 

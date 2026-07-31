@@ -4,6 +4,7 @@ export interface CollectorCliOptions {
   databasePath?: string
   almaDatabasePath?: string
   codexDatabasePath?: string
+  claudeProjectsPath?: string
 }
 
 const optionNames = new Set([
@@ -12,16 +13,18 @@ const optionNames = new Set([
   "--db-path",
   "--alma-db-path",
   "--codex-db-path",
+  "--claude-projects-path",
 ])
 
 const usage = `Usage:
   nexume-collector --server-url <url> --token <token> [options]
 
 Options:
-  --db-path <path>       Path to the OpenCode SQLite database.
-  --alma-db-path <path>  Path to the Alma SQLite database.
-  --codex-db-path <path> Path to the Codex SQLite database.
-  --help                 Show this help message.`
+  --db-path <path>            Path to the OpenCode SQLite database.
+  --alma-db-path <path>       Path to the Alma SQLite database.
+  --codex-db-path <path>      Path to the Codex SQLite database.
+  --claude-projects-path <path> Path to the Claude Code projects directory.
+  --help                      Show this help message.`
 
 export class CollectorCliUsageError extends Error {
   constructor(message: string) {
@@ -86,5 +89,6 @@ export function parseCollectorCliOptions(args: string[]): CollectorCliOptions {
     databasePath: values.get("--db-path"),
     almaDatabasePath: values.get("--alma-db-path"),
     codexDatabasePath: values.get("--codex-db-path"),
+    claudeProjectsPath: values.get("--claude-projects-path"),
   }
 }

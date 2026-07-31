@@ -2,6 +2,7 @@ import { hostname } from "node:os"
 
 import {
   AlmaCollector,
+  ClaudeCodeCollector,
   CodexCollector,
   CollectorConnection,
   OpenCodeCollector,
@@ -27,6 +28,7 @@ const sources = [
   new OpenCodeCollector({ databasePath: options.databasePath }),
   new AlmaCollector({ databasePath: options.almaDatabasePath }),
   new CodexCollector({ databasePath: options.codexDatabasePath }),
+  new ClaudeCodeCollector({ projectsPath: options.claudeProjectsPath }),
 ]
 const connection = new CollectorConnection({
   serverUrl: options.serverUrl,
@@ -48,8 +50,8 @@ const connection = new CollectorConnection({
 for (const source of sources) {
   console.log(
     source.available
-      ? `[collector] ${source.agent}: ${source.databasePath}`
-      : `[collector] ${source.agent} database is unavailable: ${source.databasePath}`,
+      ? `[collector] ${source.agent}: ${source.dataPath}`
+      : `[collector] ${source.agent} data is unavailable: ${source.dataPath}`,
   )
 }
 connection.connect()

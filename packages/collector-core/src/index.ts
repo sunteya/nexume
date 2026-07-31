@@ -39,3 +39,8 @@ export {
   getCodexDatabasePath,
   type CodexCollectorOptions,
 } from "./codex"
+export {
+  ClaudeCodeCollector,
+  getClaudeCodeProjectsPath,
+  type ClaudeCodeCollectorOptions,
+} from "./claude-code"

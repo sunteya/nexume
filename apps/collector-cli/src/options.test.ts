@@ -16,6 +16,8 @@ describe("parseCollectorCliOptions", () => {
         "/data/alma.db",
         "--codex-db-path",
         "/data/codex.db",
+        "--claude-projects-path",
+        "/data/claude/projects",
       ]),
     ).toEqual({
       serverUrl: "https://nexume.example.com",
@@ -23,6 +25,7 @@ describe("parseCollectorCliOptions", () => {
       databasePath: "/data/opencode.db",
       almaDatabasePath: "/data/alma.db",
       codexDatabasePath: "/data/codex.db",
+      claudeProjectsPath: "/data/claude/projects",
     })
   })
 

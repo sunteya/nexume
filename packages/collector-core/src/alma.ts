@@ -238,9 +238,11 @@ export class AlmaCollector
   readonly agent = "alma"
   readonly checkpointFormat = "alma/sqlite/v1"
   readonly databasePath: string
+  readonly dataPath: string
 
   constructor(options: AlmaCollectorOptions = {}) {
     this.databasePath = options.databasePath ?? getAlmaDatabasePath()
+    this.dataPath = this.databasePath
   }
 
   get available(): boolean {

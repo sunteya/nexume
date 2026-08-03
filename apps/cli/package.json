@@ -4,7 +4,7 @@
   "description": "Command-line interface for Nexume",
   "type": "module",
   "bin": {
-    "nexume": "./dist/index.js"
+    "nexume": "dist/index.js"
   },
   "files": [
     "dist"

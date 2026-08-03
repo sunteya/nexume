@@ -5,7 +5,7 @@ FROM oven/bun:1.3.13 AS build
 WORKDIR /app
 
 COPY package.json bun.lock ./
-COPY apps/collector-cli/package.json apps/collector-cli/package.json
+COPY apps/cli/package.json apps/cli/package.json
 COPY apps/desktop/package.json apps/desktop/package.json
 COPY apps/server/package.json apps/server/package.json
 COPY packages/admin-ui/package.json packages/admin-ui/package.json
@@ -31,7 +31,7 @@ ENV NODE_ENV=production \
     NEXUME_DATA_DIR=/data
 
 COPY package.json bun.lock ./
-COPY apps/collector-cli/package.json apps/collector-cli/package.json
+COPY apps/cli/package.json apps/cli/package.json
 COPY apps/desktop/package.json apps/desktop/package.json
 COPY apps/server/package.json apps/server/package.json
 COPY packages/admin-ui/package.json packages/admin-ui/package.json

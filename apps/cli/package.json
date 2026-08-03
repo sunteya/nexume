@@ -1,0 +1,48 @@
+{
+  "name": "nexume",
+  "version": "0.1.0",
+  "description": "Command-line interface for Nexume",
+  "type": "module",
+  "bin": {
+    "nexume": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "start": "bun src/index.ts",
+    "build": "bun scripts/build.ts",
+    "prepack": "bun run build",
+    "test": "bun test",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "engines": {
+    "bun": ">=1.3.13"
+  },
+  "keywords": [
+    "nexume",
+    "collector",
+    "claude-code",
+    "codex",
+    "opencode",
+    "alma"
+  ],
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sunteya/nexume.git",
+    "directory": "apps/cli"
+  },
+  "homepage": "https://github.com/sunteya/nexume#readme",
+  "bugs": {
+    "url": "https://github.com/sunteya/nexume/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@nexume/collector-core": "workspace:*",
+    "@types/bun": "latest",
+    "typescript": "^5.7.2"
+  }
+}

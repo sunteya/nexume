@@ -1,5 +1,5 @@
 {
-  "name": "nexume",
+  "name": "nexume-monorepo",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -8,8 +8,9 @@
   ],
   "scripts": {
     "dev:server": "bun --filter @nexume/server dev",
+    "build:cli": "bun --filter nexume build",
     "test": "bun run --parallel --filter '*' test",
     "typecheck": "bun run --parallel --filter '*' typecheck",
-    "build": "bun run --filter @nexume/server build && bun run --filter @nexume/desktop build"
+    "build": "bun run build:cli && bun run --filter @nexume/server build && bun run --filter @nexume/desktop build"
   }
 }

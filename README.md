@@ -27,7 +27,7 @@ sudo xattr -dr com.apple.quarantine /Applications/Nexume.app
 
 You can then launch Nexume normally from Applications.
 
-### Method 2: Docker + Collector (Under Development)
+### Method 2: Docker + Collector
 
 Create `compose.yml`:
 
@@ -43,6 +43,18 @@ services:
     volumes:
       - ./data:/data
 ```
+
+After starting the Server, create a Remote Collector in the management page and copy its token. Install [Bun](https://bun.com/), then run the Collector on the machine containing your AI agent session data:
+
+```bash
+bunx nexume config set \
+  --server-url http://your-server:3000 \
+  --collector-token nxc_your-collector-token
+
+bunx nexume collector
+```
+
+See the [`nexume` CLI](apps/cli/README.md) for global installation and data path options.
 
 ## Supported Agents
 

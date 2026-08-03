@@ -3,16 +3,16 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "nexume",
+      "name": "nexume-monorepo",
     },
-    "apps/collector-cli": {
-      "name": "@nexume/collector-cli",
+    "apps/cli": {
+      "name": "nexume",
       "version": "0.1.0",
-      "dependencies": {
-        "@nexume/collector-core": "workspace:*",
-        "@nexume/contracts": "workspace:*",
+      "bin": {
+        "nexume": "./dist/index.js",
       },
       "devDependencies": {
+        "@nexume/collector-core": "workspace:*",
         "@types/bun": "latest",
         "typescript": "^5.7.2",
       },
@@ -287,8 +287,6 @@
     "@mistralai/mistralai": ["@mistralai/mistralai@2.2.6", "", { "dependencies": { "@opentelemetry/semantic-conventions": "^1.40.0", "ws": "^8.18.0", "zod": "^3.25.0 || ^4.0.0", "zod-to-json-schema": "^3.25.0" }, "peerDependencies": { "@opentelemetry/api": "^1.9.0" }, "optionalPeers": ["@opentelemetry/api"] }, "sha512-W8pX7zHxjJvMIpw8JMxeJEleapXX0Q9NPszdNzqkM3MIEoIGPObdodujj+WHteXEvGfaP/AMwlNyRfEzSY6dQQ=="],
 
     "@nexume/admin-ui": ["@nexume/admin-ui@workspace:packages/admin-ui"],
-
-    "@nexume/collector-cli": ["@nexume/collector-cli@workspace:apps/collector-cli"],
 
     "@nexume/collector-core": ["@nexume/collector-core@workspace:packages/collector-core"],
 
@@ -717,6 +715,8 @@
     "negotiator": ["negotiator@0.6.3", "", {}, "sha512-+EUsqGPLsM+j/zdChZjsnX51g4XrHFOIXwfnCVPGlQk/k5giakcKsuxCObBRu6DSm9opw/O6slWbJdghQM4bBg=="],
 
     "netmask": ["netmask@2.1.1", "", {}, "sha512-eonl3sLUha+S1GzTPxychyhnUzKyeQkZ7jLjKrBagJgPla13F+uQ71HgpFefyHgqrjEbCPkDArxYsjY8/+gLKA=="],
+
+    "nexume": ["nexume@workspace:apps/cli"],
 
     "node-domexception": ["node-domexception@1.0.0", "", {}, "sha512-/jKZoMpw0F8GRwl4/eLROPA3cfcXtLApP0QzLmUT/HuPCZWyB7IY9ZrMeKw2O/nFIqPQB3PVM9aYm0F312AXDQ=="],
 

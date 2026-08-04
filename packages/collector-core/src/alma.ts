@@ -92,6 +92,46 @@ function parseTimestamp(value: string): number {
   return Date.parse(value)
 }
 
+function configureReadDatabase(database: Database): Database {
+  database.exec("PRAGMA busy_timeout = 5000; PRAGMA query_only = ON")
+  database.query("PRAGMA schema_version").get()
+  return database
+}
+
+function isSqliteCantOpen(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { code?: unknown }).code === "SQLITE_CANTOPEN"
+  )
+}
+
+function openReadDatabase(databasePath: string): Database {
+  const readonlyDatabase = new Database(databasePath, {
+    readonly: true,
+    strict: true,
+  })
+  try {
+    return configureReadDatabase(readonlyDatabase)
+  } catch (error) {
+    readonlyDatabase.close()
+    if (!isSqliteCantOpen(error)) throw error
+  }
+
+  // A WAL database needs write access to recreate missing -wal/-shm files.
+  const database = new Database(databasePath, {
+    readwrite: true,
+    create: false,
+    strict: true,
+  })
+  try {
+    return configureReadDatabase(database)
+  } catch (error) {
+    database.close()
+    throw error
+  }
+}
+
 function decodePosition(
   checkpoint: SessionSyncCheckpoint | undefined,
 ): AlmaPosition | undefined {
@@ -257,13 +297,9 @@ export class AlmaCollector
       throw new CollectorUnavailableError("未发现本机 Alma Session 数据。")
     }
 
-    const database = new Database(this.databasePath, {
-      readonly: true,
-      strict: true,
-    })
+    const database = openReadDatabase(this.databasePath)
 
     try {
-      database.exec("PRAGMA busy_timeout = 5000; PRAGMA query_only = ON")
       const position = decodePosition(request.checkpoint)
       const titleFingerprint = createSessionTitleFingerprint(
         database
@@ -349,12 +385,8 @@ export class AlmaCollector
       throw new CollectorUnavailableError("未发现本机 Alma Session 数据。")
     }
 
-    const database = new Database(this.databasePath, {
-      readonly: true,
-      strict: true,
-    })
+    const database = openReadDatabase(this.databasePath)
     try {
-      database.exec("PRAGMA busy_timeout = 5000; PRAGMA query_only = ON")
       const session = database
         .query<SessionRow, [string]>(
           `SELECT

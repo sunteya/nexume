@@ -901,23 +901,9 @@ button:focus-visible,
 
 .session-message {
   width: 100%;
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 18px 18px 20px 14px;
+  margin: 0;
+  padding: 18px 18px 20px;
   border-bottom: 1px solid var(--nx-border);
-  border-left: 3px solid var(--nx-border-strong);
-}
-
-.session-message.is-user {
-  border-left-color: #357a9e;
-}
-
-.session-message.is-assistant {
-  border-left-color: var(--nx-accent);
-}
-
-.session-message.is-tool {
-  border-left-color: #9a6c27;
 }
 
 .session-message-header {
@@ -955,7 +941,7 @@ button:focus-visible,
   gap: 6px;
 }
 
-.session-message-text,
+.session-message-markdown,
 .session-message-detail pre {
   overflow-wrap: anywhere;
   margin: 0;
@@ -963,7 +949,218 @@ button:focus-visible,
   font-family: inherit;
   font-size: 13px;
   line-height: 1.62;
+}
+
+.session-message-detail pre {
   white-space: pre-wrap;
+}
+
+.session-message-markdown {
+  min-width: 0;
+}
+
+.session-message-markdown > :first-child {
+  margin-top: 0;
+}
+
+.session-message-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.session-message-markdown h1,
+.session-message-markdown h2,
+.session-message-markdown h3,
+.session-message-markdown h4,
+.session-message-markdown h5,
+.session-message-markdown h6 {
+  margin: 20px 0 8px;
+  color: var(--nx-text);
+  font-weight: 690;
+  letter-spacing: 0;
+  line-height: 1.3;
+}
+
+.session-message-markdown h1 {
+  font-size: 20px;
+}
+
+.session-message-markdown h2 {
+  font-size: 18px;
+}
+
+.session-message-markdown h3 {
+  font-size: 16px;
+}
+
+.session-message-markdown h4,
+.session-message-markdown h5,
+.session-message-markdown h6 {
+  font-size: 14px;
+}
+
+.session-message-markdown p,
+.session-message-markdown ul,
+.session-message-markdown ol,
+.session-message-markdown blockquote,
+.session-message-markdown pre,
+.session-message-markdown table,
+.session-message-markdown details {
+  margin: 0 0 12px;
+}
+
+.session-message-markdown ul,
+.session-message-markdown ol {
+  padding-left: 24px;
+}
+
+.session-message-markdown li + li {
+  margin-top: 4px;
+}
+
+.session-message-markdown blockquote {
+  padding: 2px 0 2px 12px;
+  border-left: 3px solid var(--nx-border-strong);
+  color: var(--nx-text-soft);
+}
+
+.session-message-markdown blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+.session-message-markdown a {
+  color: var(--nx-accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.session-message-markdown a:hover {
+  color: var(--nx-accent-hover);
+}
+
+.session-message-markdown code,
+.session-message-markdown kbd {
+  border: 1px solid var(--nx-border);
+  border-radius: 4px;
+  background: var(--nx-surface-muted);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+
+.session-message-markdown code {
+  padding: 1px 4px;
+}
+
+.session-message-markdown kbd {
+  padding: 2px 5px;
+  box-shadow: 0 1px 0 var(--nx-border-strong);
+}
+
+.session-message-markdown pre {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 12px;
+  border: 1px solid var(--nx-border);
+  border-radius: 5px;
+  background: var(--nx-surface-muted);
+  line-height: 1.55;
+  white-space: pre;
+}
+
+.session-message-markdown pre code {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: inherit;
+}
+
+.session-message-markdown .session-event-block {
+  position: relative;
+  margin: 0 0 12px;
+}
+
+.session-message-markdown .session-event-block-label {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  padding: 4px 7px;
+  border-bottom: 1px solid var(--nx-border);
+  border-left: 1px solid var(--nx-border);
+  border-radius: 0 4px 0 4px;
+  color: var(--nx-text-muted);
+  background: var(--nx-surface);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.session-message-markdown .session-pty-exited {
+  margin: 0;
+  padding-top: 34px;
+  white-space: pre-wrap;
+}
+
+.session-message-markdown hr {
+  height: 1px;
+  margin: 18px 0;
+  border: 0;
+  background: var(--nx-border);
+}
+
+.session-message-markdown table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-spacing: 0;
+  border-collapse: collapse;
+}
+
+.session-message-markdown th,
+.session-message-markdown td {
+  padding: 6px 9px;
+  border: 1px solid var(--nx-border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.session-message-markdown th {
+  background: var(--nx-surface-muted);
+  font-weight: 680;
+}
+
+.session-message-markdown img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 10px 0;
+}
+
+.session-message-markdown details {
+  padding: 8px 10px;
+  border: 1px solid var(--nx-border);
+  border-radius: 5px;
+  background: var(--nx-surface-muted);
+}
+
+.session-message-markdown summary {
+  cursor: pointer;
+  color: var(--nx-text-soft);
+  font-weight: 650;
+}
+
+.session-message-markdown details[open] summary {
+  margin-bottom: 8px;
+}
+
+.session-message-markdown mark {
+  padding: 0 2px;
+  color: var(--nx-text);
+  background: #fff0a8;
+}
+
+html.dark .session-message-markdown mark {
+  background: #766526;
 }
 
 .session-message-call-detail {
@@ -1075,10 +1272,6 @@ button:focus-visible,
 
 html.dark .session-detail-view {
   background: #202524;
-}
-
-html.dark .session-detail-view .session-message {
-  background: #252a29;
 }
 
 html.dark .session-detail-view .session-message-detail {

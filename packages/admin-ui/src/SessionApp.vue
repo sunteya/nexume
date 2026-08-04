@@ -42,6 +42,7 @@ import type {
 } from "@nexume/contracts"
 
 import type { SessionClient } from "./client"
+import { renderMarkdown } from "./markdown"
 import PageToolbar from "./PageToolbar.vue"
 
 const props = withDefaults(
@@ -731,10 +732,11 @@ onActivated(() => {
               v-for="part in message.parts.filter(isVisibleTextPart)"
               :key="part.id"
             >
-              <pre
+              <div
                 v-if="part.type === 'text'"
-                class="session-message-text"
-              >{{ part.text }}</pre>
+                class="session-message-markdown"
+                v-html="renderMarkdown(part.text)"
+              />
               <div v-else class="session-reasoning">
                 <brain :size="16" aria-hidden="true" />
                 <pre>{{ formatReasoningText(part.text) }}</pre>

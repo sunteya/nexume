@@ -21,7 +21,7 @@ import {
 import type { SettingsStore, StoredAiSettings } from "@nexume/storage"
 
 const validationTimeoutMs = 15_000
-const titleSuggestionTimeoutMs = 30_000
+const titleSuggestionTimeoutMs = 3 * 60_000
 const titleSuggestionMessageLimit = 8
 const titleSuggestionTextLimit = 8_000
 const titleSuggestionOutputLimit = 120

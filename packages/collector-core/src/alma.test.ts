@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Database } from "bun:sqlite"
-import { mkdtempSync, rmSync } from "node:fs"
+import { existsSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -153,6 +153,23 @@ describe("AlmaCollector", () => {
     expect(result.items.some((session) => session.id === "incognito")).toBe(
       false,
     )
+  })
+
+  test("reads a WAL database when its sidecar files are missing", () => {
+    const databasePath = createDatabase()
+    const database = new Database(databasePath, { strict: true })
+    database.exec("PRAGMA journal_mode = WAL")
+    database.close()
+    rmSync(`${databasePath}-wal`, { force: true })
+    rmSync(`${databasePath}-shm`, { force: true })
+
+    expect(existsSync(`${databasePath}-wal`)).toBe(false)
+    expect(existsSync(`${databasePath}-shm`)).toBe(false)
+
+    const collector = new AlmaCollector({ databasePath })
+    const result = collector.readSessionPage({ mode: "reconcile", limit: 20 })
+
+    expect(result.items).toHaveLength(20)
   })
 
   test("continues after a tied timestamp using the session id", () => {

@@ -159,4 +159,47 @@ describe("CollectorSyncRunner", () => {
 
     expect(states).toEqual([true, false])
   })
+
+  test("waits for the current sync when stopped", async () => {
+    let release!: () => void
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const runner = new CollectorSyncRunner({
+      sources: [
+        {
+          agent: "codex",
+          checkpointFormat: "codex/test/v1",
+          available: true,
+          async readSessionPage() {
+            await blocked
+            return { items: [], hasMore: false }
+          },
+        },
+      ],
+      target: {
+        async begin() {
+          return { runId: "run-1", mode: "incremental", batchSize: 100 }
+        },
+        async commit() {
+          return { duplicate: false, upserted: 0, deleted: 0 }
+        },
+      },
+    })
+
+    void runner.syncNow()
+    await Promise.resolve()
+    expect(runner.isSyncing()).toBe(true)
+
+    let stopped = false
+    const stopping = runner.stop().then(() => {
+      stopped = true
+    })
+    await Promise.resolve()
+    expect(stopped).toBe(false)
+
+    release()
+    await stopping
+    expect(runner.isSyncing()).toBe(false)
+  })
 })

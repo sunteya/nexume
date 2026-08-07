@@ -106,29 +106,83 @@ const runtime = startServerRuntime({
   onError: (error) => console.error(error),
 })
 
-let allowingQuit = false
-Electrobun.events.on(
-  "before-quit",
-  (event: { response: { allow: boolean } }) => {
-    if (allowingQuit) return
-    event.response = { allow: false }
-    void runtime.close().finally(() => {
-      storage.close()
-      allowingQuit = true
-      Utils.quit()
-    })
-  },
-)
-
-new BrowserWindow({
+const bootstrapUrl = runtime.createBootstrapUrl()
+const appOrigin = new URL(bootstrapUrl).origin
+const window = new BrowserWindow({
   title: "Nexume",
-  url: runtime.createBootstrapUrl(),
+  url: bootstrapUrl,
   frame: {
     width: 980,
     height: 680,
     x: 160,
     y: 120,
   },
+})
+
+function showQuitWaiting(): void {
+  window.webview?.executeJavascript(
+    'window.dispatchEvent(new Event("nexume:quit-waiting"))',
+  )
+}
+
+let allowingQuit = false
+let closing: Promise<void> | undefined
+Electrobun.events.on(
+  "before-quit",
+  (event: { response: { allow: boolean } }) => {
+    if (allowingQuit) return
+    event.response = { allow: false }
+    if (closing) return
+    if (runtime.isLocalSyncing()) showQuitWaiting()
+    closing = (async () => {
+      try {
+        await runtime.close()
+      } catch (error) {
+        console.error("Failed to close the desktop runtime:", error)
+      }
+      try {
+        storage.close()
+      } catch (error) {
+        console.error("Failed to close desktop storage:", error)
+      } finally {
+        allowingQuit = true
+        Utils.quit()
+      }
+    })()
+  },
+)
+
+window.on("close", () => {
+  if (runtime.isLocalSyncing()) showQuitWaiting()
+})
+
+function openExternalUrl(value: string): void {
+  try {
+    const url = new URL(value, bootstrapUrl)
+    if (
+      url.origin !== appOrigin &&
+      (url.protocol === "http:" ||
+        url.protocol === "https:" ||
+        url.protocol === "mailto:")
+    ) {
+      Utils.openExternal(url.href)
+    }
+  } catch {
+    // Ignore malformed links instead of passing them to the operating system.
+  }
+}
+
+window.webview.setNavigationRules(["^*", `${appOrigin}/*`])
+window.webview.on("will-navigate", (event) => {
+  openExternalUrl((event as { data: { detail: string } }).data.detail)
+})
+Electrobun.events.on(`new-window-open-${window.webview.id}`, (event) => {
+  const detail = (
+    event as {
+      data: { detail: string | { url: string } }
+    }
+  ).data.detail
+  openExternalUrl(typeof detail === "string" ? detail : detail.url)
 })
 
 console.log(`Nexume Desktop: http://0.0.0.0:${runtime.server.port ?? port}`)

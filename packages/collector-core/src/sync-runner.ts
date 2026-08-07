@@ -23,6 +23,7 @@ export interface CollectorSyncRunnerOptions {
 export class CollectorSyncRunner {
   private timer?: ReturnType<typeof setInterval>
   private readonly syncing = new Set<string>()
+  private currentSync?: Promise<void>
 
   constructor(private readonly options: CollectorSyncRunnerOptions) {}
 
@@ -35,13 +36,15 @@ export class CollectorSyncRunner {
     )
   }
 
-  stop(): void {
+  stop(): Promise<void> {
     if (this.timer) clearInterval(this.timer)
     this.timer = undefined
+    return this.currentSync ?? Promise.resolve()
   }
 
-  async syncNow(): Promise<void> {
-    await Promise.all(
+  syncNow(): Promise<void> {
+    if (this.currentSync) return this.currentSync
+    const sync = Promise.all(
       this.options.sources.map(async (source) => {
         if (!source.available || this.syncing.has(source.agent)) return
         const wasIdle = this.syncing.size === 0
@@ -56,7 +59,15 @@ export class CollectorSyncRunner {
           if (this.syncing.size === 0) this.options.onSyncStateChange?.(false)
         }
       }),
-    )
+    ).then(() => undefined)
+    this.currentSync = sync.finally(() => {
+      this.currentSync = undefined
+    })
+    return this.currentSync
+  }
+
+  isSyncing(): boolean {
+    return this.syncing.size > 0
   }
 
   private async syncSource(source: CollectorDataSource): Promise<void> {

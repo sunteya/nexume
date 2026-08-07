@@ -231,9 +231,7 @@ export function createCollectorSocketServer(
         .emitWithAck("sessions:detail:get", request)) as GetSessionDetailResponse
     },
     async close(): Promise<void> {
-      io.disconnectSockets(true)
-      io.close()
-      engine.close()
+      await io.close()
     },
   }
 }

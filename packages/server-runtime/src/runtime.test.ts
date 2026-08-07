@@ -10,6 +10,7 @@ import {
   type WritableCollectorDataSource,
 } from "@nexume/collector-core"
 import { openStorage } from "@nexume/storage"
+import { io } from "socket.io-client"
 
 import { startServerRuntime } from "./runtime"
 
@@ -234,7 +235,19 @@ describe("startServerRuntime", () => {
       },
     )
     expect(offline.status).toBe(503)
+
+    const dashboard = io(`${origin}/server`, {
+      path: "/socket.io",
+      auth: { accessToken: "access-token" },
+      forceNew: true,
+    })
+    cleanups.push(() => {
+      dashboard.disconnect()
+    })
+    await waitFor(() => dashboard.connected)
+
     await runtime.close()
+    await waitFor(() => !dashboard.connected)
     await runtime.close()
     const replacement = Bun.serve({
       hostname: "127.0.0.1",

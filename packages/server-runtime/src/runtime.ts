@@ -172,12 +172,15 @@ export function startServerRuntime(options: StartServerRuntimeOptions) {
     createBootstrapUrl(host = "127.0.0.1"): string {
       return `http://${host}:${server.port ?? options.port}/#accessToken=${encodeURIComponent(options.accessToken)}`
     },
+    isLocalSyncing(): boolean {
+      return localSync.isSyncing()
+    },
     close(): Promise<void> {
       if (closing) return closing
       closing = Promise.resolve().then(async () => {
-        localSync.stop()
+        await localSync.stop()
         await collectorSockets.close()
-        await server.stop(true)
+        void server.stop(true)
       })
       return closing
     },
